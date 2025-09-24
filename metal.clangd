@@ -1,0 +1,21 @@
+CompileFlags:
+  Add:
+    - -I/Users/pinyi/Documents/research/arbd2v/src
+    - -I/Users/pinyi/Documents/research/arbd2v/extern/
+    - -I/Users/pinyi/Documents/research/arbd2v/extern/neighbor/include
+    - -I/Users/pinyi/Documents/research/arbd2v/extern/metal-cpp-cmake/metal-cmake/metal-cpp/
+    - -I/Users/pinyi/Documents/research/arbd2v/extern/fmt/include
+    - -I/Users/pinyi/Documents/research/arbd2v/extern/pybind11/include
+    - -I.
+    - -DUSE_METAL
+    - -std=c++20
+    - -fPIC
+    - -O3
+    - -DNDEBUG
+    - -march=native
+    - -mtune=native
+  Remove: 
+    - -Wno-unknown-cuda-version
+    - DUSE_SYCL_ACPP
+    - -DUSE_SYCL
+    - -DUSE_CUDA

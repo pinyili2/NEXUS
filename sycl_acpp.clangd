@@ -1,0 +1,22 @@
+CompileFlags:
+  Add:
+    - -I/opt/homebrew/Cellar/adaptivecpp/24.10.0_1/include/AdaptiveCpp
+    - -I/Users/pinyi/Documents/research/arbd2v/src
+    - -I/Users/pinyi/Documents/research/arbd2v/extern
+    -I/data/server10/pinyili2/arbd2v/extern/openvdb/nanovdb
+    - -I.
+    - -DUSE_SYCL_ACPP
+    - -DUSE_SYCL
+    - -std=c++20
+    - -fPIC
+    - -O3
+    - -DNDEBUG
+    - -march=native
+    - -mtune=native
+  Remove:
+    - -Wno-unknown-cuda-version
+    - -DUSE_METAL
+Diagnostics:
+  Suppress:
+    - drv_unknown_argument
+    - unused-command-line-argument-hard-error-in-future

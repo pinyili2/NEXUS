@@ -1,0 +1,57 @@
+{
+    "version": 4,
+    "configurations": [
+        {
+            "name": "Linux GCC",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "/usr/include/**",
+                "/usr/local/include/**"
+            ],
+            "defines": [],
+            "compilerPath": "/software/gcc-12.3.0/bin/gcc",
+            "cStandard": "c17",
+            "cppStandard": "c++20",
+            "intelliSenseMode": "linux-gcc-x64",
+            "configurationProvider": "ms-vscode.cmake-tools",
+            "compileCommands": "${workspaceFolder}/build/linux-cuda-debug/compile_commands.json"
+        },
+        {
+            "name": "Linux Intel DPC++ (SYCL)",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "/software/intel-oneapi-base-toolkit-2025.1.3.7/2025.1/include/**",
+                "/software/intel-oneapi-base-toolkit-2025.1.3.7/2025.1/include/sycl/**"
+            ],
+            "defines": [
+                "USE_SYCL",
+                "PROJECT_USES_SYCL_ICPX",
+                "__SYCL_DEVICE_ONLY__"
+            ],
+            "compilerPath": "/software/intel-oneapi-base-toolkit-2025.1.3.7/2025.1/bin/icpx",
+            "cStandard": "c17",
+            "cppStandard": "c++20",
+            "intelliSenseMode": "linux-clang-x64",
+            "configurationProvider": "ms-vscode.cmake-tools",
+            "compileCommands": "${workspaceFolder}/build/linux-icpx-sycl-debug/compile_commands.json"
+        },
+        {
+            "name": "Linux CUDA",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "/software/cuda-12.4/include/**",
+                "/usr/include/**",
+                "/usr/local/include/**"
+            ],
+            "defines": [
+                "USE_CUDA"
+            ],
+            "compilerPath": "/software/gcc-12.3.0/bin/gcc",
+            "cStandard": "c17",
+            "cppStandard": "c++20",
+            "intelliSenseMode": "linux-gcc-x64",
+            "configurationProvider": "ms-vscode.cmake-tools",
+            "compileCommands": "${workspaceFolder}/build/linux-cuda-debug/compile_commands.json"
+        }
+    ]
+}

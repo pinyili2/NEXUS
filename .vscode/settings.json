@@ -1,0 +1,60 @@
+{
+    "cmake.configureOnOpen": false,
+    "cmake.buildDirectory": "${workspaceFolder}/build/${buildKitTarget}",
+    "cmake.installPrefix": "${workspaceFolder}/install/${buildKitTarget}",
+    "cmake.preferredGenerators": [
+        "Unix Makefiles"
+    ],
+    "cmake.configureArgs": [
+        "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
+    ],
+    "cmake.defaultVariants": {
+        "buildType": {
+            "default": "debug",
+            "choices": {
+                "debug": {
+                    "short": "Debug",
+                    "long": "Emit debug information",
+                    "buildType": "Debug"
+                },
+                "release": {
+                    "short": "Release",
+                    "long": "Optimize generated code",
+                    "buildType": "Release"
+                }
+            }
+        }
+    },
+    "clangd.path": "/data/server10/pinyili2/local/bin/clangd",
+    "clangd.arguments": [
+        "--header-insertion=never",
+        "--log=verbose",
+        "--query-driver=/software/cuda-12.4/bin/nvcc,/data/server10/pinyili2/local/bin/clang++,/data/server10/pinyili2/local/bin/clang"
+    ],
+    "C_Cpp.intelliSenseEngine": "disabled",
+    "C_Cpp.autocomplete": "disabled",
+    "C_Cpp.errorSquiggles": "disabled",
+    "files.associations": {
+        "*.cu": "cuda-cpp",
+        "*.cuh": "cuda-cpp",
+        "*.hpp": "cpp",
+        "*.h": "cpp"
+    },
+    "editor.formatOnSave": true,
+    "editor.tabSize": 2,
+    "editor.insertSpaces": true,
+    "editor.rulers": [
+        80,
+        120
+    ],
+    "files.trimTrailingWhitespace": true,
+    "files.insertFinalNewline": true,
+    "cmake.sourceDirectory": "${workspaceFolder}",
+    "cmake.buildTask": true,
+    "terminal.integrated.env.linux": {
+        "PATH": "/data/server10/pinyili2/local/bin:/software/gcc-14.2.0-rh8/bin:/software/gcc-12.3.0/bin:/software/intel-oneapi-base-toolkit-2025.1.3.7/2025.1/bin:/software/cuda-12.4/bin:${env:PATH}",
+        "LD_LIBRARY_PATH": "/software/intel-oneapi-base-toolkit-2025.1.3.7/2025.1/lib:/software/cuda-12.4/lib64:${env:LD_LIBRARY_PATH}"
+    },
+    "git.ignoreLimitWarning": true,
+    "cmake.cacheInit": null
+}

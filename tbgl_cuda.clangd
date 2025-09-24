@@ -1,0 +1,36 @@
+CompileFlags:
+  Add:
+    - -std=c++20
+    - -DUSE_CUDA
+    - -DUSE_NVTX
+    - -D__CUDACC__
+    - -D__CUDA_ARCH__ =800
+    - -D__host__
+    - -D__device__
+    - -D__global__
+    - -I/data/server10/pinyili2/arbd2v/src
+    - -I/data/server10/pinyili2/arbd2v/extern
+    - -I/data/server10/pinyili2/arbd2v/extern/openvdb/nanovdb
+    - -I/software/openmpi-4.0.1/include
+    - -I/software/cuda-12.4/include
+    - -I/software/gcc-12.3.0/include/c++/12.3.0
+    - -I/software/gcc-12.3.0/include/c++/12.3.0/x86_64-pc-linux-gnu
+    - -I/software/gcc-12.3.0/include/c++/12.3.0/backward
+    - -I/software/gcc-12.3.0/include
+    - -I/software/gcc-12.3.0/lib/gcc/x86_64-pc-linux-gnu/12.3.0/include
+    - -I/software/gcc-12.3.0/lib/gcc/x86_64-pc-linux-gnu/12.3.0/include-fixed
+    - --system-header-prefix=/usr/include
+    - --system-header-prefix=/usr/lib/gcc/x86_64-redhat-linux/8
+  Remove:
+    - --acpp-targets=*
+    - -fsycl
+    - -fsycl-targets=*
+    - -Wno-unknown-cuda-version
+Diagnostics:
+  Suppress:
+    - drv_unknown_argument
+    - unused-command-line-argument-hard-error-in-future
+    - pp_file_not_found
+    - constexpr_redecl_mismatch
+    - expected_unqualified_id
+    - expected_member_name_or_semi

@@ -1,0 +1,27 @@
+---
+alwaysApply: true
+---
+
+
+# Backend Implementation Guidelines
+
+## Architecture
+
+This project implements a backend-agnostic environment using consistent abstractions defined in the Backend folder:
+
+- [Buffer.h](mdc:src/Backend/Buffer.h): For memory management
+- [Events.h](mdc:src/Backend/Events.h): For synchronization
+- [Resource.h](mdc:src/Backend/Resource.h): For resource management
+- [Kernels.h] (mdc:src/Backend/Kernels.h): Global kernel definitions
+
+## Backend Implementations
+
+Backend-specific implementations are located in the Backend folder:
+
+- CUDA: [Backend/CUDA/](mdc:src/Backend/CUDA/)
+- Metal: [Backend/METAL/](mdc:src/Backend/METAL/)
+- SYCL: [Backend/SYCL/](mdc:src/Backend/SYCL/)
+
+**Important**: This project assumes single-backend usage. Users should enable only one backend (CUDA, Metal, or SYCL) at a time. Multi-backend configurations are not supported.
+
+Each backend implementation should maintain consistent interfaces while optimizing for the specific platform.

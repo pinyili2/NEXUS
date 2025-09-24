@@ -1,0 +1,23 @@
+---
+alwaysApply: true
+---
+
+# Project Configuration
+
+This project uses:
+
+- C++20 standard
+- CUDA 12.4
+- Metal 4 with Metal-cpp
+- CMake for build configuration
+
+## Build Configuration Rules
+
+- Machine-specific configurations,for example, global libraries and folders MUST be placed in [CMakePresets.json](mdc:CMakePresets.json), not in CMakeLists.txt files
+- All core math definitions are located in the [Math](mdc:src/Math) folder
+
+## Testing
+
+- All unit tests should be in [test_unit](mdc:test_unit) and group by properties.
+- Integration tests should be in the [Testing](mdc:Testing) folder.
+ 

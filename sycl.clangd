@@ -1,0 +1,32 @@
+CompileFlags:
+  Add:
+    - -std=c++20
+    - -nostdinc++
+    - -I/data/server10/pinyili2/arbd2v/src
+    - -isystem
+    - /software/gcc-14.2.0-rh8/include/c++/14.2.0
+    - -I/software/intel-oneapi-base-toolkit-2025.1.3.7/2025.1/include
+    - -I/software/intel-oneapi-base-toolkit-2025.1.3.7/2025.1/include/sycl
+    - -I/data/server10/pinyili2/local/lib/clang/17/include
+    - -I/data/server10/pinyili2/arbd2v/extern/fmt/include
+    - -isystem
+    - /software/gcc-14.2.0-rh8/include/c++/14.2.0/x86_64-pc-linux-gnu
+    - -isystem
+    - /software/gcc-14.2.0-rh8/include/c++/14.2.0/backward
+    - -isystem
+    - /usr/include
+    - -DUSE_SYCL_ICPX
+    - -DUSE_SYCL
+
+  Remove:
+    - -Wno-unknown-cuda-version
+Diagnostics:
+  Suppress:
+    - drv_unknown_argument
+    - unused-command-line-argument-hard-error-in-future
+
+If:
+  PathMatch: [".*\\.(h|hpp|hh)$"]
+CompileFlags:
+  Add:
+    - -xc++-header
