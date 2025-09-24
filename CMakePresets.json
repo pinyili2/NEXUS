@@ -1,0 +1,375 @@
+{
+    "version": 4,
+    "configurePresets": [
+        {
+            "name": "delta-cuda-debug",
+            "displayName": "Delta CUDA (Debug)",
+            "description": "Targets Delta with CUDA for GPU development (Debug build).",
+            "binaryDir": "${sourceDir}/build/delta-cuda-debug",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_CUDA_COMPILER": "/sw/external/cudatoolkits/cuda-12.6.3/bin/nvcc",
+                "CMAKE_CXX_COMPILER": "/sw/spack/deltas11-2023-03/apps/linux-rhel8-zen3/gcc-11.4.0/openmpi-5.0.2-o2g3ojh/bin/mpicxx",
+                "CMAKE_C_COMPILER": "/sw/spack/deltas11-2023-03/apps/linux-rhel8-zen3/gcc-11.4.0/openmpi-5.0.2-o2g3ojh/bin/mpicc",
+                "USE_CUDA": "ON",
+                "USE_MPI": "OFF",
+                "CMAKE_CXX_EXTENSIONS": "OFF",
+                "CMAKE_CXX_FLAGS": "-I/sw/spack/deltas11-2023-03/apps/linux-rhel8-x86_64/gcc-8.5.0/gcc-11.4.0-yycklku/include/c++/11.4.0"
+            }
+        },
+        {
+            "name": "delta-cuda-release",
+            "displayName": "Delta CUDA (Release)",
+            "description": "Targets Delta with CUDA for GPU development (Release build).",
+            "binaryDir": "${sourceDir}/build/delta-cuda-release",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "CMAKE_CUDA_COMPILER": "/sw/external/cudatoolkits/cuda-12.6.3/bin/nvcc",
+                "CMAKE_CXX_COMPILER": "/sw/external/llvm/16.0.6/bin/clang++",
+                "CMAKE_C_COMPILER": "/sw/external/llvm/16.0.6/bin/clang",
+                "USE_CUDA": "ON",
+                "CMAKE_CXX_EXTENSIONS": "OFF",
+                "CMAKE_CXX_FLAGS": "-I/opt/rh/gcc-toolset-12/root/usr/include/c++/12"
+            }
+        },
+        {
+            "name": "delta-icpx-release",
+            "displayName": "Delta SYCL (Release)",
+            "description": "Targets Delta with icpx SYCL for GPU development (Release build).",
+            "binaryDir": "${sourceDir}/build/delta-icpx-release",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "CMAKE_CXX_COMPILER": "/sw/spack/deltas11-2023-03/apps/linux-rhel8-zen/gcc-8.5.0/intel-oneapi-compilers-2024.0.0-r5a4jwi/compiler/2024.0/bin/icpx",
+                "USE_SYCL_ICPX": "ON",
+                "CMAKE_CXX_EXTENSIONS": "OFF",
+                "CMAKE_CXX_FLAGS": "-I/opt/rh/gcc-toolset-12/root/usr/include/c++/12"
+            }
+        },
+        {
+            "name": "delta-acpp-release",
+            "displayName": "Delta SYCL (Release)",
+            "description": "Targets Delta with SYCL for GPU development (Release build).",
+            "binaryDir": "${sourceDir}/build/delta-acpp-release",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "CMAKE_CXX_COMPILER": "/sw/external/adaptivecpp/AdaptiveCpp/25.02.0/bin/acpp",
+                "CMAKE_C_COMPILER": "/sw/external/llvm/16.0.6/bin/clang",
+                "USE_SYCL_ACPP": "ON",
+                "CMAKE_CXX_EXTENSIONS": "OFF",
+                "CMAKE_CXX_FLAGS": "-I/opt/rh/gcc-toolset-12/root/usr/include/c++/12 -I/sw/external/adaptivecpp/spack/opt/spack/linux-zen3/boost-1.88.0-ujw6ygicduudrnfy4b6s53k7liwy5ouo/include",
+                "CMAKE_EXE_LINKER_FLAGS": "-fuse-ld=lld -lstdc++",
+                "Boost_ROOT": "/sw/external/adaptivecpp/spack/opt/spack/linux-zen3/boost-1.88.0-ujw6ygicduudrnfy4b6s53k7liwy5ouo"
+            }
+        },
+        {
+            "name": "delta-acpp-debug",
+            "displayName": "Delta ACPP SYCL (Debug)",
+            "description": "Targets Delta with ACPP SYCL for GPU development (Debug build).",
+            "binaryDir": "${sourceDir}/build/delta-acpp-debug",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_CXX_COMPILER": "/sw/external/adaptivecpp/AdaptiveCpp/25.02.0/bin/acpp",
+                "CMAKE_C_COMPILER": "/sw/external/llvm/16.0.6/bin/clang",
+                "USE_SYCL_ACPP": "ON",
+                "CMAKE_CXX_EXTENSIONS": "OFF",
+                "CMAKE_CXX_FLAGS": "-I/opt/rh/gcc-toolset-12/root/usr/include/c++/12 -I/sw/external/adaptivecpp/spack/opt/spack/linux-zen3/boost-1.88.0-ujw6ygicduudrnfy4b6s53k7liwy5ouo/include",
+                "CMAKE_EXE_LINKER_FLAGS": "-fuse-ld=lld -lstdc++",
+                "Boost_ROOT": "/sw/external/adaptivecpp/spack/opt/spack/linux-zen3/boost-1.88.0-ujw6ygicduudrnfy4b6s53k7liwy5ouo"
+            }
+        },
+        {
+            "name": "macos-acpp-sycl-debug",
+            "displayName": "macOS ACPP SYCL (Debug)",
+            "description": "Targets macOS with acpp for SYCL development (Debug build).",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/macos-acpp-sycl-debug",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_CXX_COMPILER": "/opt/homebrew/bin/acpp",
+                "USE_SYCL_ACPP": "ON",
+                "USE_METAL": "OFF",
+                "CMAKE_CXX_EXTENSIONS": "OFF"
+            }
+        },
+        {
+            "name": "macos-acpp-sycl-release",
+            "displayName": "macOS ACPP SYCL (Release)",
+            "description": "Targets macOS with acpp for SYCL development (Release build).",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/macos-acpp-sycl-release",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "CMAKE_CXX_COMPILER": "/opt/homebrew/bin/acpp",
+                "USE_SYCL_ACPP": "ON",
+                "USE_METAL": "OFF",
+                "CMAKE_CXX_EXTENSIONS": "OFF"
+            }
+        },
+        {
+            "name": "macos-metal-debug",
+            "displayName": "macOS Metal (Debug)",
+            "description": "Targets macOS with Metal for GPU development (Debug build).",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/macos-metal-debug",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "ARBD_METAL_FRAMEWORK_PATH": "/Applications/Xcode-beta.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks",
+                "USE_METAL": "ON",
+                "CMAKE_CXX_EXTENSIONS": "OFF"
+            }
+        },
+        {
+            "name": "macos-metal-release",
+            "displayName": "macOS Metal (Release)",
+            "description": "Targets macOS with Metal for GPU development (Release build).",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/macos-metal-release",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "ARBD_METAL_FRAMEWORK_PATH": "/Applications/Xcode-beta.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks",
+                "USE_METAL": "ON",
+                "CMAKE_CXX_EXTENSIONS": "OFF"
+            }
+        },
+        {
+            "name": "tbgl-icpx-sycl-debug",
+            "displayName": "tbgl Intel DPC++ SYCL (Debug)",
+            "description": "Targets tbgl with Intel DPC++ (icpx) for SYCL development (Debug build).",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/tbgl-icpx-sycl-debug",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_CXX_COMPILER": "/software/intel-oneapi-base-toolkit-2025.1.3.7/2025.1/bin/icpx",
+                "USE_SYCL_ICPX": "ON",
+                "CMAKE_CXX_EXTENSIONS": "OFF"
+            }
+        },
+        {
+            "name": "tbgl-icpx-sycl-mpi-debug",
+            "displayName": "tbgl Intel DPC++ SYCL (Release)",
+            "description": "Targets tbgl with Intel DPC++ (icpx) for SYCL development (Release build).",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/tbgl-icpx-sycl-release",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "CMAKE_CXX_COMPILER": "/software/intel-oneapi-base-toolkit-2025.1.3.7/2025.1/bin/icpx",
+                "USE_MPI": "ON",
+                "USE_SYCL_ICPX": "ON",
+                "CMAKE_CXX_EXTENSIONS": "OFF"
+            }
+        },
+        {
+            "name": "tbgl-cuda-debug",
+            "displayName": "tbgl CUDA (Debug)",
+            "description": "Targets tbgl with CUDA for GPU development (Debug build).",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/tbgl-cuda-debug",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_CUDA_COMPILER": "/software/cuda-12.4/bin/nvcc",
+                "CMAKE_CUDA_HOST_COMPILER": "/software/gcc-12.3.0/bin/gcc",
+                "CMAKE_CXX_COMPILER": "/software/gcc-12.3.0/bin/g++",
+                "CMAKE_C_COMPILER": "/software/gcc-12.3.0/bin/gcc",
+                "USE_CUDA": "ON",
+                "CMAKE_CXX_EXTENSIONS": "OFF"
+            }
+        },
+        {
+            "name": "tbgl-cuda-release",
+            "displayName": "tbgl CUDA (Release)",
+            "description": "Targets tbgl with CUDA for GPU development (Release build).",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/tbgl-cuda-release",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "CMAKE_CUDA_COMPILER": "/software/cuda-12.4/bin/nvcc",
+                "CMAKE_CUDA_HOST_COMPILER": "/software/gcc-12.3.0/bin/gcc",
+                "CMAKE_CXX_COMPILER": "/software/gcc-12.3.0/bin/g++",
+                "CMAKE_C_COMPILER": "/software/gcc-12.3.0/bin/gcc",
+                "USE_CUDA": "ON",
+                "CMAKE_CXX_EXTENSIONS": "OFF"
+            }
+        },
+        {
+            "name": "tbgl-cuda-mpi",
+            "displayName": "CUDA with MPI (OpenMPI 5.0.7 + GCC 12.3)",
+            "description": "Intel DPC++ SYCL build with MPI support using OpenMPI 5.0.7 and GCC 14 for RHEL systems.",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/cuda-mpi-openmpi507-gcc123",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_CXX_COMPILER": "/software/gcc-12.3.0/bin/g++",
+                "CMAKE_C_COMPILER": "/software/gcc-12.3.0/bin/gcc",
+                "USE_CUDA": "ON",
+                "USE_MPI": "ON",
+                "CMAKE_CXX_EXTENSIONS": "OFF",
+                "CMAKE_CUDA_COMPILER": "/software/cuda-12.4/bin/nvcc",
+                "CMAKE_CUDA_HOST_COMPILER": "/software/gcc-12.3.0/bin/gcc",
+                "MPI_CXX_COMPILER": "/software/openmpi-5.0.7-rhel8/bin/mpicxx",
+                "MPI_C_COMPILER": "/software/openmpi-5.0.7-rhel8/bin/mpicc",
+                "MPI_CXX_INCLUDE_PATH": "/software/openmpi-5.0.7-rhel8/include",
+                "MPI_CXX_LIBRARIES": "/software/openmpi-5.0.7-rhel8/lib/libmpi.so"
+            }
+        },
+        {
+            "name": "tbgl-acpp-debug",
+            "displayName": "tbgl ACPP (Debug)",
+            "description": "Standard tbgl build with ACPP (Debug build) - Full C++20 support.",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/tbgl-acpp-debug",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_CXX_COMPILER": "/data/server10/pinyili2/local/bin/acpp",
+                "USE_SYCL_ACPP": "ON",
+                "CMAKE_CXX_EXTENSIONS": "OFF",
+                "CMAKE_BUILD_WITH_INSTALL_RPATH": "YES",
+                "CMAKE_CXX_FLAGS": "-stdlib=libc++ -nostdinc++ -I/data/server10/pinyili2/local/include/c++/v1 -I/data/server10/pinyili2/local/include/x86_64-unknown-linux-gnu/c++/v1 -Wl,-rpath,/data/server10/pinyili2/local/lib/x86_64-unknown-linux-gnu",
+                "CMAKE_EXE_LINKER_FLAGS": "-L/software/gcc-14.2.0-rh8/lib64 -lstdc++ -Wl,-rpath,/software/gcc-14.2.0-rh8/lib64"
+            }
+        },
+        {
+            "name": "tbgl-acpp-release",
+            "displayName": "tbgl ACPP (Release)",
+            "description": "Standard tbgl build with ACPP (Release build) - Full C++20 support.",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/tbgl-acpp-release",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "CMAKE_CXX_COMPILER": "/data/server10/pinyili2/local/bin/acpp",
+                "USE_SYCL_ACPP": "ON",
+                "CMAKE_CXX_EXTENSIONS": "OFF",
+                "CMAKE_CXX_FLAGS": "-stdlib=libc++ -nostdinc++ -I/data/server10/pinyili2/local/include/c++/v1 -I/data/server10/pinyili2/local/include/x86_64-unknown-linux-gnu/c++/v1 -Wl,-rpath,/data/server10/pinyili2/local/lib/x86_64-unknown-linux-gnu",
+                "CMAKE_EXE_LINKER_FLAGS": "-L/software/gcc-14.2.0-rh8/lib64 -lstdc++ -Wl,-rpath,/software/gcc-14.2.0-rh8/lib64"
+            }
+        },
+        {
+            "name": "tbgl-icpx-mpi",
+            "displayName": "Intel DPC++ SYCL with MPI (OpenMPI 5.0.7 + GCC 14)",
+            "description": "Intel DPC++ SYCL build with MPI support using OpenMPI 5.0.7 and GCC 14 for RHEL systems.",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/icpx-sycl-mpi-openmpi507-gcc14",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "CMAKE_CXX_COMPILER": "/software/intel-oneapi-base-toolkit-2025.1.3.7/2025.1/bin/icpx",
+                "CMAKE_C_COMPILER": "/software/gcc-14.2.0-rh8/bin/gcc",
+                "USE_SYCL_ICPX": "ON",
+                "USE_MPI": "ON",
+                "CMAKE_CXX_EXTENSIONS": "OFF",
+                "CMAKE_CXX_FLAGS": "-fsycl -fsycl-targets=nvptx64-nvidia-cuda -O3 -Xsycl-target-backend=nvptx64-nvidia-cuda --cuda-gpu-arch=sm_80 -DMPI_NO_CPPBIND -I/software/gcc-14.2.0-rh8/include/c++/14",
+                "CMAKE_EXE_LINKER_FLAGS": "-L/software/gcc-14.2.0-rh8/lib64 -lstdc++ -Wl,-rpath,/software/gcc-14.2.0-rh8/lib64",
+                "MPI_CXX_COMPILER": "/software/openmpi-5.0.7-rhel8/bin/mpicxx",
+                "MPI_C_COMPILER": "/software/openmpi-5.0.7-rhel8/bin/mpicc",
+                "MPI_CXX_INCLUDE_PATH": "/software/openmpi-5.0.7-rhel8/include",
+                "MPI_CXX_LIBRARIES": "/software/openmpi-5.0.7-rhel8/lib/libmpi.so"
+            }
+        },
+        {
+            "name": "tbgl-acpp-mpi",
+            "displayName": "AdaptiveCpp with MPI (OpenMPI 5.0.7 + GCC 14)",
+            "description": "AdaptiveCpp SYCL build with MPI support using OpenMPI 5.0.7 and GCC 14 for RHEL systems.",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/acpp-mpi-openmpi507-gcc14",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "CMAKE_CXX_COMPILER": "/data/server10/pinyili2/local/bin/acpp",
+                "CMAKE_C_COMPILER": "/software/gcc-14.2.0-rh8/bin/gcc",
+                "USE_SYCL_ACPP": "ON",
+                "USE_MPI": "ON",
+                "CMAKE_CXX_EXTENSIONS": "OFF",
+                "CMAKE_CXX_FLAGS": "-stdlib=libc++ -nostdinc++ -I/data/server10/pinyili2/local/include/c++/v1 -I/data/server10/pinyili2/local/include/x86_64-unknown-linux-gnu/c++/v1 -Wl,-rpath,/data/server10/pinyili2/local/lib/x86_64-unknown-linux-gnu -DMPI_NO_CPPBIND",
+                "CMAKE_EXE_LINKER_FLAGS": "-L/software/gcc-14.2.0-rh8/lib64 -lstdc++ -Wl,-rpath,/software/gcc-14.2.0-rh8/lib64",
+                "MPI_CXX_COMPILER": "/software/openmpi-5.0.7-rhel8/bin/mpicxx",
+                "MPI_C_COMPILER": "/software/openmpi-5.0.7-rhel8/bin/mpicc"
+            }
+        },
+        {
+            "name": "Configure preset using toolchain file",
+            "displayName": "Configure preset using toolchain file",
+            "description": "Sets Ninja generator, build and install directory",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/out/build/${presetName}",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_TOOLCHAIN_FILE": "",
+                "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/${presetName}"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "default-debug",
+            "configurePreset": "macos-acpp-sycl-debug",
+            "displayName": "Build Debug"
+        },
+        {
+            "name": "default-release",
+            "configurePreset": "macos-acpp-sycl-release",
+            "displayName": "Build Release"
+        },
+        {
+            "name": "default-metal-debug",
+            "configurePreset": "macos-metal-debug",
+            "displayName": "Build Debug (Metal)"
+        },
+        {
+            "name": "default-metal-release",
+            "configurePreset": "macos-metal-release",
+            "displayName": "Build Release (Metal)"
+        },
+        {
+            "name": "tbgl-icpx-sycl-debug",
+            "configurePreset": "tbgl-icpx-sycl-debug",
+            "displayName": "Build tbgl SYCL Debug"
+        },
+        {
+            "name": "tbgl-icpx-sycl-mpi-debug",
+            "configurePreset": "tbgl-icpx-sycl-mpi-debug",
+            "displayName": "Build tbgl SYCL Release"
+        },
+        {
+            "name": "tbgl-cuda-debug-build",
+            "configurePreset": "tbgl-cuda-debug",
+            "displayName": "Build tbgl CUDA Debug"
+        },
+        {
+            "name": "tbgl-cuda-release-build",
+            "configurePreset": "tbgl-cuda-release",
+            "displayName": "Build tbgl CUDA Release"
+        },
+        {
+            "name": "tbgl-acpp-debug-build",
+            "configurePreset": "tbgl-acpp-debug",
+            "displayName": "Build tbgl ACPP Debug"
+        },
+        {
+            "name": "tbgl-acpp-release-build",
+            "configurePreset": "tbgl-acpp-release",
+            "displayName": "Build tbgl ACPP Release"
+        },
+        {
+            "name": "delta-cuda-debug-build",
+            "configurePreset": "delta-cuda-debug",
+            "displayName": "Build Delta CUDA Debug"
+        },
+        {
+            "name": "delta-cuda-release-build",
+            "configurePreset": "delta-cuda-release",
+            "displayName": "Build Delta CUDA Release"
+        },
+        {
+            "name": "delta-acpp-release-build",
+            "configurePreset": "delta-acpp-release",
+            "displayName": "Build Delta ACPP Release"
+        },
+        {
+            "name": "tbgl-icpx-mpi",
+            "configurePreset": "tbgl-icpx-mpi",
+            "displayName": "Build Intel DPC++ SYCL with MPI (OpenMPI 5.0.7 + GCC 14)"
+        },
+        {
+            "name": "tbgl-acpp-mpi",
+            "configurePreset": "tbgl-acpp-mpi",
+            "displayName": "Build AdaptiveCpp with MPI (OpenMPI 5.0.7 + GCC 14)"
+        }
+    ]
+}

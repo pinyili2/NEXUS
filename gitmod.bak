@@ -1,0 +1,25 @@
+[submodule "extern/pybind11"]
+	path = extern/pybind11
+	url = https://github.com/pybind/pybind11.git
+	branch = stable
+[submodule "extern/Catch2"]
+	path = extern/Catch2
+	url = https://github.com/catchorg/Catch2.git
+[submodule "extern/fmt"]
+	path = extern/fmt
+	url = https://github.com/fmtlib/fmt.git
+[submodule "extern/metal-cpp-cmake"]
+	path = extern/metal-cpp-cmake
+	url = https://github.com/pinyili2/metal-cpp-cmake.git
+[submodule "extern/spdlog"]
+	path = extern/spdlog
+	url = https://github.com/gabime/spdlog.git
+[submodule "extern/openvdb"]
+	path = extern/openvdb
+	url = https://github.com/pinyili2/openvdb/
+[submodule "extern/colvars"]
+	path = extern/colvars
+	url = https://github.com/Colvars/colvars.git
+[submodule "extern/random/OpenRAND"]
+	path = extern/random/OpenRAND
+	url = https://github.com/msu-sparta/OpenRAND.git

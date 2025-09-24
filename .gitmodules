@@ -1,0 +1,9 @@
+[submodule "extern/fmt"]
+	path = extern/fmt
+	url = https://github.com/fmtlib/fmt.git
+[submodule "extern/Catch2"]
+	path = extern/Catch2
+	url = https://github.com/catchorg/Catch2.git
+[submodule "extern/metal-cpp-cmake"]
+	path = extern/metal-cpp-cmake
+	url = https://github.com/pinyili2/metal-cpp-cmake.git
