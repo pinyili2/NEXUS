@@ -1,113 +1,246 @@
-#include "Backend/Resource.h"
+// src/Backend/Resource.cpp - New implementation
+#include "Resource.h"
 
 #ifdef USE_CUDA
-#include "Backend/CUDA/CUDAManager.h"
-#endif
-
-#ifdef USE_SYCL
-#include "Backend/SYCL/SYCLManager.h"
-#endif
-
-#ifdef USE_METAL
-#include "Backend/METAL/METALManager.h"
+#include <cuda_runtime.h>
 #endif
 
 namespace ARBD {
-void* Resource::get_stream_type(int stream_id) const {
-	return get_stream_type(static_cast<StreamType>(stream_id));
+
+// ============================================================================
+// Device Context Management
+// ============================================================================
+
+void Resource::ensure_context() const {
+  if (!device_verified_) {
+    device_available_ = verify_device();
+    device_verified_ = true;
+  }
+
+  if (!device_available_) {
+    ARBD_Exception(ExceptionType::ValueError,
+                   "Device {} of type {} is not available", id_,
+                   getTypeString());
+  }
+
+  // Activate device for all operations
+  activate();
 }
 
-void* Resource::get_stream_type(StreamType stream_type) const {
-	// CPU resources don't have streams
-	if (type == ResourceType::CPU) {
-		return nullptr;
-	}
+void Resource::activate() const {
+  if (type_ == ResourceType::CPU)
+    return;
 
 #ifdef USE_CUDA
-	if (type == ResourceType::CUDA) {
-		try {
-			auto& device = CUDA::Manager::get_device(static_cast<int>(id));
-			// Return the raw cudaStream_t as void*
-			return reinterpret_cast<void*>(device.get_next_stream());
-		} catch (...) {
-			return nullptr;
-		}
-	}
+  if (type_ == ResourceType::CUDA) {
+    CUDA_CHECK(cudaSetDevice(static_cast<int>(id_)));
+    return;
+  }
 #endif
 
 #ifdef USE_SYCL
-	if (type == ResourceType::SYCL) {
-		try {
-			auto& device = SYCL::Manager::get_device(id);
-			// Return pointer to the Queue object
-			return &device.get_next_queue();
-		} catch (...) {
-			return nullptr;
-		}
-	}
+  if (type_ == ResourceType::SYCL) {
+    // SYCL device context is managed through queues
+    // No global device switching needed
+    return;
+  }
+#endif
+}
+
+bool Resource::verify_device() const {
+  if (type_ == ResourceType::CPU)
+    return true;
+
+#ifdef USE_CUDA
+  if (type_ == ResourceType::CUDA) {
+    int device_count;
+    if (cudaGetDeviceCount(&device_count) != cudaSuccess)
+      return false;
+    return id_ < device_count;
+  }
 #endif
 
-#ifdef USE_METAL
-	if (type == ResourceType::METAL) {
-		try {
-			auto& device = METAL::Manager::get_device(id);
-			// Return pointer to the Queue object
-			return device.get_next_queue();
-		} catch (...) {
-			return nullptr;
-		}
-	}
+#ifdef USE_SYCL
+  if (type_ == ResourceType::SYCL) {
+    return id_ < static_cast<short>(SYCL::Manager::device_count());
+  }
 #endif
 
-	return nullptr;
+  return false;
+}
+
+// ============================================================================
+// Stream Management (Resource owns streams)
+// ============================================================================
+
+void *Resource::get_stream(StreamType stream_type) const {
+  if (type_ == ResourceType::CPU)
+    return nullptr;
+
+  // Ensure device is available and activated
+  ensure_context();
+
+  // Initialize streams if needed (on correct device)
+  ensure_queues_initialized();
+
+#ifdef USE_CUDA
+  if (type_ == ResourceType::CUDA) {
+    return reinterpret_cast<void *>(queues_->get_next_stream());
+  }
+#endif
+
+#ifdef USE_SYCL
+  if (type_ == ResourceType::SYCL) {
+    return &queues_->get_next_queue();
+  }
+#endif
+
+  return nullptr;
+}
+
+void *Resource::get_stream(size_t stream_id, StreamType stream_type) const {
+  if (type_ == ResourceType::CPU)
+    return nullptr;
+
+  ensure_context();
+  ensure_queues_initialized();
+
+#ifdef USE_CUDA
+  if (type_ == ResourceType::CUDA) {
+    return reinterpret_cast<void *>(queues_->get_stream(stream_id));
+  }
+#endif
+
+#ifdef USE_SYCL
+  if (type_ == ResourceType::SYCL) {
+    return &queues_->get_queue(stream_id);
+  }
+#endif
+
+  return nullptr;
+}
+
+void Resource::ensure_queues_initialized() const {
+#ifdef USE_CUDA
+  if (type_ == ResourceType::CUDA && !queues_) {
+    // Device context is already activated by ensure_context()
+    queues_ = std::make_unique<CUDA::StreamPool>(static_cast<int>(id_));
+  }
+#endif
+
+#ifdef USE_SYCL
+  if (type_ == ResourceType::SYCL && !queues_) {
+    auto device = SYCL::Manager::get_device_by_id(id_);
+    queues_ = std::make_unique<SYCL::QueuePool>(device);
+  }
+#endif
 }
 
 void Resource::synchronize_streams() const {
-	// CPU resources don't need synchronization
-	if (type == ResourceType::CPU) {
-		return;
-	}
+  if (type_ == ResourceType::CPU)
+    return;
+  else {
+    queues_->synchronize_all();
+  }
+}
+
+// ============================================================================
+// Factory Methods
+// ============================================================================
+
+Resource Resource::create_cuda_device(short device_id) {
+#ifdef USE_CUDA
+  int device_count;
+  CUDA_CHECK(cudaGetDeviceCount(&device_count));
+  if (device_id >= device_count) {
+    ARBD_Exception(ExceptionType::ValueError,
+                   "CUDA device {} not available (found {} devices)", device_id,
+                   device_count);
+  }
+  return Resource{ResourceType::CUDA, device_id};
+#else
+  ARBD_Exception(ExceptionType::ValueError, "CUDA not available");
+#endif
+}
+
+Resource Resource::create_sycl_device(short device_id) {
+#ifdef USE_SYCL
+  if (device_id >= static_cast<short>(SYCL::Manager::device_count())) {
+    ARBD_Exception(ExceptionType::ValueError, "SYCL device {} not available",
+                   device_id);
+  }
+  return Resource{ResourceType::SYCL, device_id};
+#else
+  ARBD_Exception(ExceptionType::ValueError, "SYCL not available");
+#endif
+}
+
+// ============================================================================
+// Peer Access
+// ============================================================================
+
+bool Resource::can_access_peer(const Resource &other) const {
+  // Same resource can always access itself
+  if (type_ == other.type_ && id_ == other.id_) {
+    return true;
+  }
+
+  // CPU can access all resources (through host memory)
+  if (type_ == ResourceType::CPU || other.type_ == ResourceType::CPU) {
+    return true;
+  }
+
+  // Cross-backend peer access is not supported
+  if (type_ != other.type_) {
+    return false;
+  }
 
 #ifdef USE_CUDA
-	if (type == ResourceType::CUDA) {
-		try {
-			auto& device = CUDA::Manager::get_device(static_cast<int>(id));
-			// Synchronize all streams for this device
-			for (size_t i = 0; i < CUDA::Manager::NUM_STREAMS; ++i) {
-				cudaStreamSynchronize(device.get_stream(i));
-			}
-		} catch (...) {
-			// Ignore errors during synchronization
-		}
-		return;
-	}
+  if (type_ == ResourceType::CUDA) {
+    int can_access;
+    cudaDeviceCanAccessPeer(&can_access, id_, other.id_);
+    return can_access != 0;
+  }
+#endif
+
+  // For SYCL and Metal, assume no peer access for now
+  return false;
+}
+
+// ============================================================================
+// Validation
+// ============================================================================
+
+void Resource::validate() const {
+  if (type_ == ResourceType::CPU) {
+    return; // CPU resources are always valid
+  }
+
+#ifdef USE_CUDA
+  if (type_ == ResourceType::CUDA) {
+    int device_count;
+    if (cudaGetDeviceCount(&device_count) != cudaSuccess ||
+        id_ >= device_count) {
+      ARBD_Exception(ExceptionType::ValueError,
+                     "CUDA device {} does not exist (count: {})", id_,
+                     device_count);
+    }
+    return;
+  }
 #endif
 
 #ifdef USE_SYCL
-	if (type == ResourceType::SYCL) {
-		try {
-			auto& device = SYCL::Manager::get_device(id);
-			// Use the device's built-in synchronization method
-			device.synchronize_all_queues();
-		} catch (...) {
-			// Ignore errors during synchronization
-		}
-		return;
-	}
+  if (type_ == ResourceType::SYCL) {
+    if (id_ >= static_cast<short>(SYCL::Manager::device_count())) {
+      ARBD_Exception(ExceptionType::ValueError, "SYCL device {} does not exist",
+                     id_);
+    }
+    return;
+  }
 #endif
 
-#ifdef USE_METAL
-	if (type == ResourceType::METAL) {
-		try {
-			auto& device = METAL::Manager::get_device(id);
-			// Synchronize all queues for this device
-			device.synchronize_all_queues();
-		} catch (...) {
-			// Ignore errors during synchronization
-		}
-		return;
-	}
-#endif
+  ARBD_Exception(ExceptionType::ValueError, "Unsupported resource type {}",
+                 static_cast<int>(type_));
 }
 
 } // namespace ARBD
