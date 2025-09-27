@@ -21,7 +21,7 @@ endif()
 if(USE_CUDA)
     message(STATUS "src: Adding CUDA specific sources to lib${PROJECT_NAME}")
     list(APPEND LIB_SOURCES
-        CUDA/CUDAManager.cpp
+        Legacy/CUDAManager.cpp
     )
     # Ensure the CUDA language is enabled in your top-level project() call
     # when USE_CUDA is ON, so CMake knows how to compile .cu files.

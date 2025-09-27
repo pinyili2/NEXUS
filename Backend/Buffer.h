@@ -138,16 +138,16 @@ public:
    */
   Buffer() = default;
   explicit Buffer(size_t count)
-      : count_(count), resource_(get_best_available_resource()) {
+      : count_(count), resource_(get_device_resource(0)) {
     if (count_ > 0) {
-      queue_ = resource_.get_stream_type(); // Acquire stream from resource
+      queue_ = resource_.get_stream(); // Acquire stream from resource
       allocate_on_resource(resource_, count_, queue_, sync_);
     }
   }
   explicit Buffer(size_t count, short device_id)
       : count_(count), resource_(get_device_resource(device_id)) {
     if (count_ > 0) {
-      queue_ = resource_.get_stream_type(); // Acquire stream from resource
+      queue_ = resource_.get_stream(); // Acquire stream from resource
       allocate_on_resource(resource_, count_, queue_, sync_);
     }
   }
@@ -155,7 +155,7 @@ public:
   explicit Buffer(size_t count, const Resource &resource)
       : count_(count), resource_(resource) {
     if (count_ > 0) {
-      queue_ = resource_.get_stream_type(); // Acquire stream from resource
+      queue_ = resource_.get_stream(); // Acquire stream from resource
       allocate_on_resource(resource_, count_, queue_, sync_);
     }
   }
@@ -190,7 +190,7 @@ public:
   Buffer(const Buffer &other, const Resource &resource)
       : count_(other.count_), resource_(resource) {
     if (count_ > 0) {
-      queue_ = resource_.get_stream_type(); // Acquire stream from resource
+      queue_ = resource_.get_stream(); // Acquire stream from resource
       allocate_on_resource(resource_, count_, queue_, sync_);
       copy_device_to_device(other, count_);
     }
@@ -202,7 +202,7 @@ public:
   Buffer(const Buffer &other)
       : resource_(other.resource_), count_(other.count_) {
     if (count_ > 0) {
-      queue_ = resource_.get_stream_type(); // Acquire stream from resource
+      queue_ = resource_.get_stream(); // Acquire stream from resource
       allocate_on_resource(resource_, count_, queue_, sync_);
       copy_device_to_device(other, count_);
     }
@@ -217,7 +217,7 @@ public:
       resource_ = other.resource_;
       count_ = other.count_;
       if (count_ > 0) {
-        queue_ = resource_.get_stream_type(); // Acquire stream from resource
+        queue_ = resource_.get_stream(); // Acquire stream from resource
         allocate_on_resource(resource_, count_, queue_, sync_);
         copy_device_to_device(other, count_);
       }
@@ -260,7 +260,7 @@ public:
   void create(size_t count, const Resource &resource) {
     resource_ = resource;
     count_ = count;
-    queue_ = resource_.get_stream_type(); // Acquire stream from resource
+    queue_ = resource_.get_stream(); // Acquire stream from resource
     allocate_on_resource(resource_, count_, queue_, sync_);
   }
 
@@ -278,7 +278,7 @@ public:
     }
 
     // Get the new queue for the target resource
-    void *new_queue = target_resource.get_stream_type();
+    void *new_queue = target_resource.get_stream();
 
     // First, try to allocate the new buffer.
     T *new_ptr = nullptr;
@@ -587,7 +587,7 @@ private:
     }
 
 #ifdef USE_CUDA
-    if (resource_.type == ResourceType::CUDA) {
+    if (resource_.type() == ResourceType::CUDA) {
       cudaEvent_t event;
       CUDA_CHECK(cudaEventCreate(&event));
       CUDA_CHECK(cudaEventRecord(event, static_cast<cudaStream_t>(queue_)));
@@ -596,7 +596,7 @@ private:
 #endif
 
 #ifdef USE_SYCL
-    if (resource_.type == ResourceType::SYCL) {
+    if (resource_.type() == ResourceType::SYCL) {
       // For AdaptiveCpp, submit a simple single_task operation
       sycl::queue *q = static_cast<sycl::queue *>(queue_);
       auto event = q->submit([&](sycl::handler &h) {
@@ -609,7 +609,7 @@ private:
 #endif
 
 #ifdef USE_METAL
-    if (resource_.type == ResourceType::METAL) {
+    if (resource_.type() == ResourceType::METAL) {
       // Create a Metal command buffer for the event
       auto &device = METAL::Manager::get_current_device();
       auto &queue = device.get_next_queue();
@@ -651,8 +651,7 @@ public:
     // This version now uses your custom memory pool for allocation.
     // It creates a new buffer and allocates the required memory from the pool.
     Buffer new_buffer;
-    new_buffer.resource_ =
-        pool ? pool->resource() : get_best_available_resource();
+    new_buffer.resource_ = pool ? pool->resource() : get_device_resource(0);
 
     // Allocate memory from your global temporary pool
     new_buffer.device_ptr_ = static_cast<T *>(ARBD::get_temp_pool().allocate(
@@ -667,44 +666,6 @@ private:
    * @brief Get the best available resource (prioritizes GPU devices over CPU)
    * @todo Implement this.
    */
-  static Resource get_best_available_resource() {
-#ifdef USE_SYCL
-    try {
-      // Try SYCL first if available
-      auto &current_device = SYCL::Manager::get_current_device();
-      return Resource{ResourceType::SYCL,
-                      static_cast<idx_t>(current_device.id())};
-    } catch (...) {
-      // Continue to next option
-    }
-#endif
-
-#ifdef USE_CUDA
-    try {
-      // Try CUDA next
-      int device;
-      if (cudaGetDevice(&device) == cudaSuccess) {
-        return Resource{ResourceType::CUDA, static_cast<idx_t>(device)};
-      }
-    } catch (...) {
-      // Continue to next option
-    }
-#endif
-
-#ifdef USE_METAL
-    try {
-      // Try Metal next
-      auto &current_device = METAL::Manager::get_current_device();
-      return Resource{ResourceType::METAL,
-                      static_cast<idx_t>(current_device.id())};
-    } catch (...) {
-      // Continue to next option
-    }
-#endif
-
-    // Fallback to CPU only if no GPU devices available
-    return Resource{ResourceType::CPU, 0};
-  }
 
   static Resource get_device_resource(short device_id) {
 #ifdef USE_SYCL
@@ -816,11 +777,11 @@ public:
   }
   void prefetch_devices(void *queue = nullptr) {
     for (const auto &r : devices_)
-      Policy::prefetch(this->data(), this->bytes(), int(r.id), queue);
+      Policy::prefetch(this->data(), this->bytes(), int(r.id()), queue);
   }
   void advise_preferred_for_all(int advice) {
     for (const auto &r : devices_)
-      Policy::mem_advise(this->data(), this->bytes(), advice, int(r.id));
+      Policy::mem_advise(this->data(), this->bytes(), advice, int(r.id()));
   }
 
   // Expandable features
@@ -894,12 +855,12 @@ public:
   void set_preferred_location_all() {
     for (const auto &r : devices_)
       Policy::mem_advise(this->data(), this->bytes(),
-                         cudaMemAdviseSetPreferredLocation, int(r.id));
+                         cudaMemAdviseSetPreferredLocation, int(r.id()));
   }
   void set_accessed_by_all() {
     for (const auto &r : devices_)
       Policy::mem_advise(this->data(), this->bytes(),
-                         cudaMemAdviseSetAccessedBy, int(r.id));
+                         cudaMemAdviseSetAccessedBy, int(r.id()));
   }
 #endif
 

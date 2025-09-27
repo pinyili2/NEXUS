@@ -78,21 +78,6 @@ public:
   // Check if queue is valid before use
   [[nodiscard]] bool is_valid() const noexcept { return valid_; }
 
-  void synchronize() {
-    if (!valid_)
-      return;
-    // Skip synchronization with HipSYCL to avoid deadlocks during cleanup
-    // The runtime will handle outstanding operations automatically
-  }
-
-  template <typename KernelName = class kernel_default_name, typename F>
-  sycl::event submit(F &&f) {
-    if (!valid_) {
-      throw std::runtime_error("Attempting to submit to invalid queue");
-    }
-    return queue_.submit(std::forward<F>(f));
-  }
-
   [[nodiscard]] bool is_in_order() const noexcept {
     return valid_ && queue_.is_in_order();
   }
@@ -151,7 +136,7 @@ public:
 
   Queue &get_next_queue() {
     // Same round-robin logic as Manager::Device
-    size_t idx = next_index_.fetch_add(1) % 8;
+    size_t idx = next_index_.fetch_add(1) % NUM_QUEUES;
     return queues_[idx];
   }
 
@@ -159,7 +144,7 @@ public:
 
   void synchronize_all() {
     for (auto &queue : queues_) {
-      queue.synchronize();
+      queue.get().wait();
     }
   }
 };

@@ -165,7 +165,7 @@ public:
     cudaDeviceSynchronize();
 #endif
 #ifdef USE_SYCL
-    ARBD::SYCL::Manager::sync();
+    ;
 #endif
 #ifdef USE_METAL
     ARBD::METAL::Manager::sync();
@@ -188,8 +188,16 @@ public:
                            __LINE__);
     return ptr;
 #elif defined(USE_SYCL)
-    auto &queue = ARBD::SYCL::Manager::get_current_queue();
-    return sycl::malloc_device<R>(count, queue.get());
+    // Create a resource and get its queue
+    ARBD::Resource resource;
+    void *stream_ptr = resource.get_stream();
+    if (!stream_ptr) {
+      std::cerr << "Warning: Failed to get SYCL queue from Resource"
+                << std::endl;
+      return nullptr;
+    }
+    auto &queue = *static_cast<sycl::queue *>(stream_ptr);
+    return sycl::malloc_device<R>(count, queue);
 #elif defined(USE_METAL)
     auto &device = ARBD::METAL::Manager::get_current_device();
     // Metal uses unified memory, so we can allocate using DeviceMemory
@@ -216,8 +224,13 @@ public:
 #ifdef USE_CUDA
     cudaFree(ptr);
 #elif defined(USE_SYCL)
-    auto &queue = ARBD::SYCL::Manager::get_current_queue();
-    sycl::free(ptr, queue.get());
+    // Create a resource and get its queue
+    ARBD::Resource resource;
+    void *stream_ptr = resource.get_stream();
+    if (stream_ptr) {
+      auto &queue = *static_cast<sycl::queue *>(stream_ptr);
+      sycl::free(ptr, queue);
+    }
 #elif defined(USE_METAL)
     std::free(ptr);
 #else
@@ -238,8 +251,13 @@ public:
                                       cudaMemcpyHostToDevice),
                            __FILE__, __LINE__);
 #elif defined(USE_SYCL)
-    auto &queue = ARBD::SYCL::Manager::get_current_queue();
-    queue.get().memcpy(device_ptr, host_ptr, count * sizeof(R)).wait();
+    // Create a resource and get its queue
+    ARBD::Resource resource;
+    void *stream_ptr = resource.get_stream();
+    if (stream_ptr) {
+      auto &queue = *static_cast<sycl::queue *>(stream_ptr);
+      queue.memcpy(device_ptr, host_ptr, count * sizeof(R)).wait();
+    }
 #elif defined(USE_METAL)
     std::memcpy(device_ptr, host_ptr, count * sizeof(R));
 #else
@@ -260,8 +278,13 @@ public:
                                       cudaMemcpyDeviceToHost),
                            __FILE__, __LINE__);
 #elif defined(USE_SYCL)
-    auto &queue = ARBD::SYCL::Manager::get_current_queue();
-    queue.get().memcpy(host_ptr, device_ptr, count * sizeof(R)).wait();
+    // Create a resource and get its queue
+    ARBD::Resource resource;
+    void *stream_ptr = resource.get_stream();
+    if (stream_ptr) {
+      auto &queue = *static_cast<sycl::queue *>(stream_ptr);
+      queue.memcpy(host_ptr, device_ptr, count * sizeof(R)).wait();
+    }
 #elif defined(USE_METAL)
     std::memcpy(host_ptr, device_ptr, count * sizeof(R));
 #else
@@ -289,12 +312,20 @@ public:
     *result_device = Op_t::op(args...);
 #endif
 #elif defined(USE_SYCL)
-    auto &queue = ARBD::SYCL::Manager::get_current_queue();
-    queue
-        .submit([=](sycl::handler &h) {
-          h.single_task([=]() { *result_device = Op_t::op(args...); });
-        })
-        .wait();
+    // Create a resource and get its queue
+    ARBD::Resource resource;
+    void *stream_ptr = resource.get_stream();
+    if (stream_ptr) {
+      auto &queue = *static_cast<sycl::queue *>(stream_ptr);
+      queue
+          .submit([=](sycl::handler &h) {
+            h.single_task([=]() { *result_device = Op_t::op(args...); });
+          })
+          .wait();
+    } else {
+      // Fallback: execute on host when queue is not available
+      *result_device = Op_t::op(args...);
+    }
 #elif defined(USE_METAL)
     // For Metal, we'll execute on CPU for now since compute shaders
     // require more complex setup. In a full implementation, this would

@@ -374,9 +374,9 @@ if(USE_METAL)
 
     # Also include test Metal files to ensure all kernels are available
     file(GLOB_RECURSE TEST_METAL_SOURCES
-        ${CMAKE_SOURCE_DIR}/test_unit/*.metal
-        ${CMAKE_SOURCE_DIR}/test_unit/Kernels/*.metal
-        ${CMAKE_SOURCE_DIR}/test_unit/Math/*.metal
+        ${CMAKE_SOURCE_DIR}/Tests/*.metal
+        ${CMAKE_SOURCE_DIR}/Tests/Kernels/*.metal
+        ${CMAKE_SOURCE_DIR}/Tests/Math/*.metal
     )
 
     # Combine all Metal sources
@@ -532,10 +532,10 @@ if(USE_CUDA)
 endif()
 
 add_subdirectory(Backend)
-add_subdirectory(test_unit)
+add_subdirectory(Tests)
 
 # Main application executable
-add_executable(backends_main test_unit/simple_main.cpp)
+add_executable(backends_main simple_main.cpp)
 target_include_directories(backends_main PRIVATE ${CMAKE_SOURCE_DIR})
 target_link_libraries(backends_main PRIVATE "lib${PROJECT_NAME}")
 

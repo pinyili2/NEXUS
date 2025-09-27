@@ -1,104 +1,101 @@
 #pragma once
 #ifndef __METAL_VERSION__
-#include "Backend/Resource.h"
+#include "Resource.h"
 #include <map>
 #include <mutex>
 #include <vector>
 
 namespace ARBD {
 
-template<typename T>
-class MemoryPool {
-  private:
-	struct PoolBlock {
-		void* ptr = nullptr;
-		size_t size = 0;
-		Resource resource;
-		bool in_use = false;
-	};
+template <typename T> class MemoryPool {
+private:
+  struct PoolBlock {
+    void *ptr = nullptr;
+    size_t size = 0;
+    Resource resource;
+    bool in_use = false;
+  };
 
-	std::vector<PoolBlock> blocks_;
-	std::mutex mutex_;
+  std::vector<PoolBlock> blocks_;
+  std::mutex mutex_;
 
-  public:
-	// Allocate from pool or create new block
-	void* allocate(size_t bytes, const Resource& resource) {
-		std::lock_guard<std::mutex> lock(mutex_);
+public:
+  // Allocate from pool or create new block
+  void *allocate(size_t bytes, const Resource &resource) {
+    std::lock_guard<std::mutex> lock(mutex_);
 
-		// Try to find existing free block
-		for (auto& block : blocks_) {
-			if (!block.in_use && block.size >= bytes && block.resource == resource) {
-				block.in_use = true;
-				return block.ptr;
-			}
-		}
+    // Try to find existing free block
+    for (auto &block : blocks_) {
+      if (!block.in_use && block.size >= bytes && block.resource == resource) {
+        block.in_use = true;
+        return block.ptr;
+      }
+    }
 
-		// Allocate new block
-		PoolBlock new_block;
-		new_block.size = bytes;
-		new_block.resource = resource;
-		new_block.in_use = true;
+    // Allocate new block
+    PoolBlock new_block;
+    new_block.size = bytes;
+    new_block.resource = resource;
+    new_block.in_use = true;
 
 #ifdef USE_CUDA
-		if (resource.type == ResourceType::CUDA) {
-			cudaSetDevice(resource.id);
-			cudaMalloc(&new_block.ptr, bytes);
-		}
+    if (resource.type() == ResourceType::CUDA) {
+      cudaSetDevice(resource.id());
+      cudaMalloc(&new_block.ptr, bytes);
+    }
 #endif
 
 #ifdef USE_SYCL
-		if (resource.type == ResourceType::SYCL) {
-			auto& device = SYCL::Manager::get_device(resource.id);
-			new_block.ptr = sycl::malloc_device(bytes, device.get_queue(0));
-		}
+    if (resource.type() == ResourceType::SYCL) {
+      Resource device = Resource::create_sycl_device(resource.id());
+      new_block.ptr = sycl::malloc_device(
+          bytes, *static_cast<sycl::queue *>(device.get_queue(0)));
+    }
 #endif
 
-		blocks_.push_back(new_block);
-		return new_block.ptr;
-	}
+    blocks_.push_back(new_block);
+    return new_block.ptr;
+  }
 
-	void deallocate(void* ptr) {
-		std::lock_guard<std::mutex> lock(mutex_);
+  void deallocate(void *ptr) {
+    std::lock_guard<std::mutex> lock(mutex_);
 
-		for (auto& block : blocks_) {
-			if (block.ptr == ptr) {
-				block.in_use = false;
-				return;
-			}
-		}
-	}
+    for (auto &block : blocks_) {
+      if (block.ptr == ptr) {
+        block.in_use = false;
+        return;
+      }
+    }
+  }
 
-	void clear() {
-		std::lock_guard<std::mutex> lock(mutex_);
+  void clear() {
+    std::lock_guard<std::mutex> lock(mutex_);
 
-		for (auto& block : blocks_) {
+    for (auto &block : blocks_) {
 #ifdef USE_CUDA
-			if (block.resource.type == ResourceType::CUDA) {
-				cudaFree(block.ptr);
-			}
+      if (block.resource.type() == ResourceType::CUDA) {
+        cudaFree(block.ptr);
+      }
 #endif
 
 #ifdef USE_SYCL
-			if (block.resource.type == ResourceType::SYCL) {
-				auto& device = SYCL::Manager::get_device(block.resource.id);
-				sycl::free(block.ptr, device.get_queue(0));
-			}
+      if (block.resource.type() == ResourceType::SYCL) {
+        Resource device = Resource::create_sycl_device(block.resource.id());
+        sycl::free(block.ptr, *static_cast<sycl::queue *>(device.get_queue()));
+      }
 #endif
-		}
+    }
 
-		blocks_.clear();
-	}
+    blocks_.clear();
+  }
 
-	~MemoryPool() {
-		clear();
-	}
+  ~MemoryPool() { clear(); }
 };
 
-
 // Global memory pool for temporary allocations
-inline MemoryPool<idx_t>& get_temp_pool() {
-	static MemoryPool<idx_t> pool;
-	return pool;
+inline MemoryPool<idx_t> &get_temp_pool() {
+  static MemoryPool<idx_t> pool;
+  return pool;
 }
 
 namespace MemoryAdvise {

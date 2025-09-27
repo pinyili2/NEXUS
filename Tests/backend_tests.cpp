@@ -40,26 +40,22 @@ static void initialize_backend_once() {
 
   try {
 #ifdef USE_SYCL
-    SYCL::Manager::init();
-    SYCL::Manager::load_info(); // Ensure full device initialization
-    SYCL::Manager::use(0);      // Select device 0
+    SYCL::Manager::init();      // Simplified Manager - discovery only
+    SYCL::Manager::load_info(); // Load device info
     g_backend_available = true;
 #endif
 
 #ifdef USE_CUDA
-    auto &cuda_manager = CUDA::Manager::instance();
-    cuda_manager.init();
+    CUDA::Manager::init(); // Simplified Manager - discovery only
     g_backend_available = true;
 #endif
 
 #ifdef USE_METAL
-    auto &metal_manager = METAL::Manager::instance();
-    metal_manager.init();
+    METAL::Manager::init();
     g_backend_available = true;
 #endif
 
     if (!g_backend_available) {
-      // Fallback to CPU
       g_backend_available = true;
     }
 
@@ -78,13 +74,11 @@ TEST_CASE("Resource Abstraction", "[backend][resource]") {
   initialize_backend_once();
 
   SECTION("Default resource construction") {
-    // Test default resource construction - should use the compile-time backend
     Resource default_resource;
-    REQUIRE(default_resource.id == 0);
+    REQUIRE(default_resource.id() == 0); // Use id() method
   }
 
   SECTION("Resource construction with ID") {
-    // Use the compile-time backend type, not hardcoded CPU
 #ifdef USE_SYCL
     Resource resource_0(ResourceType::SYCL, 0);
     Resource resource_1(ResourceType::SYCL, 1);
@@ -93,87 +87,92 @@ TEST_CASE("Resource Abstraction", "[backend][resource]") {
     Resource resource_0(ResourceType::CUDA, 0);
     Resource resource_1(ResourceType::CUDA, 1);
     ResourceType expected_type = ResourceType::CUDA;
-#elif defined(USE_METAL)
-    Resource resource_0(ResourceType::METAL, 0);
-    Resource resource_1(ResourceType::METAL, 1);
-    ResourceType expected_type = ResourceType::METAL;
 #else
     Resource resource_0(ResourceType::CPU, 0);
     Resource resource_1(ResourceType::CPU, 1);
     ResourceType expected_type = ResourceType::CPU;
 #endif
 
-    REQUIRE(resource_0.id == 0);
-    REQUIRE(resource_1.id == 1);
-    REQUIRE(resource_0.type == expected_type);
-    REQUIRE(resource_1.type == expected_type);
+    REQUIRE(resource_0.id() == 0); // Use id() method
+    REQUIRE(resource_1.id() == 1);
+    REQUIRE(resource_0.type() == expected_type); // Use type() method
+    REQUIRE(resource_1.type() == expected_type);
   }
 
   SECTION("Resource backend type detection") {
     Resource test_resource;
 
 #ifdef USE_SYCL
-    REQUIRE(test_resource.type == ResourceType::SYCL);
+    REQUIRE(test_resource.type() == ResourceType::SYCL);
 #elif defined(USE_CUDA)
-    REQUIRE(test_resource.type == ResourceType::CUDA);
-#elif defined(USE_METAL)
-    REQUIRE(test_resource.type == ResourceType::METAL);
+    REQUIRE(test_resource.type() == ResourceType::CUDA);
 #else
-    REQUIRE(test_resource.type == ResourceType::CPU);
+    REQUIRE(test_resource.type() == ResourceType::CPU);
 #endif
-  }
-
-  SECTION("Resource equality and comparison") {
-    // Use the compile-time backend type
-#ifdef USE_SYCL
-    Resource r1(ResourceType::SYCL, 0);
-    Resource r2(ResourceType::SYCL, 0);
-    Resource r3(ResourceType::SYCL, 1);
-#elif defined(USE_CUDA)
-    Resource r1(ResourceType::CUDA, 0);
-    Resource r2(ResourceType::CUDA, 0);
-    Resource r3(ResourceType::CUDA, 1);
-#elif defined(USE_METAL)
-    Resource r1(ResourceType::METAL, 0);
-    Resource r2(ResourceType::METAL, 0);
-    Resource r3(ResourceType::METAL, 1);
-#else
-    Resource r1(ResourceType::CPU, 0);
-    Resource r2(ResourceType::CPU, 0);
-    Resource r3(ResourceType::CPU, 1);
-#endif
-
-    REQUIRE(r1 == r2);
-    REQUIRE_FALSE(r1 == r3);
   }
 
   SECTION("Resource copying semantics") {
-    // Use the compile-time backend type
 #ifdef USE_SYCL
     Resource original(ResourceType::SYCL, 42);
     ResourceType expected_type = ResourceType::SYCL;
 #elif defined(USE_CUDA)
     Resource original(ResourceType::CUDA, 42);
     ResourceType expected_type = ResourceType::CUDA;
-#elif defined(USE_METAL)
-    Resource original(ResourceType::METAL, 42);
-    ResourceType expected_type = ResourceType::METAL;
 #else
     Resource original(ResourceType::CPU, 42);
     ResourceType expected_type = ResourceType::CPU;
 #endif
-    Resource copy = original;
+
+    Resource copy = original; // Now works with custom copy constructor
 
     REQUIRE(copy == original);
-    REQUIRE(copy.id == 42);
-    REQUIRE(copy.type == expected_type);
+    REQUIRE(copy.id() == 42);
+    REQUIRE(copy.type() == expected_type);
   }
 
   SECTION("Resource stream operations") {
     Resource resource;
 
-    // All backends should support basic operations
+    // Test stream acquisition
+    if (resource.is_device()) {
+      void *stream = resource.get_stream();
+      REQUIRE(stream != nullptr); // Device resources should provide streams
+
+      // Test specific stream access
+      void *stream_0 = resource.get_stream(0);
+      void *stream_1 = resource.get_stream(1);
+      REQUIRE(stream_0 != nullptr);
+      REQUIRE(stream_1 != nullptr);
+
+      // Test different stream types
+      void *compute_stream = resource.get_stream(StreamType::Compute);
+      void *memory_stream = resource.get_stream(StreamType::Memory);
+      REQUIRE(compute_stream != nullptr);
+      REQUIRE(memory_stream != nullptr);
+    }
+
     REQUIRE_NOTHROW(resource.synchronize_streams());
+  }
+
+  SECTION("Resource factory methods") {
+    if (g_backend_available) {
+      try {
+#ifdef USE_CUDA
+        auto cuda_res = Resource::create_cuda_device(0);
+        REQUIRE(cuda_res.type() == ResourceType::CUDA);
+        REQUIRE(cuda_res.id() == 0);
+#endif
+
+#ifdef USE_SYCL
+        auto sycl_res = Resource::create_sycl_device(0);
+        REQUIRE(sycl_res.type() == ResourceType::SYCL);
+        REQUIRE(sycl_res.id() == 0);
+#endif
+
+      } catch (const std::exception &e) {
+        WARN("Factory method test failed: " << e.what());
+      }
+    }
   }
 }
 
@@ -438,12 +437,13 @@ TEST_CASE("Advanced Backend Features", "[backend][advanced]") {
   SECTION("SYCL Queue Management") {
     if (g_backend_available) {
       try {
-        // Access SYCL manager statically
-        auto &current_device = SYCL::Manager::get_current_device();
-        auto &queue = current_device.get_next_queue();
+        // Use Resource to get queue
+        Resource resource(ResourceType::SYCL, 0);
+        void *stream_ptr = resource.get_stream();
+        REQUIRE(stream_ptr != nullptr);
 
-        // Basic queue operations should work
-        REQUIRE_NOTHROW(queue.synchronize());
+        // Test queue operations through Resource
+        REQUIRE_NOTHROW(resource.synchronize_streams());
       } catch (const std::exception &e) {
         WARN("SYCL queue management failed: " << e.what());
       }
@@ -513,7 +513,7 @@ TEST_CASE("Backend Integration", "[backend][integration]") {
         std::vector<float> zero_data(n, 0.0f);
         temp_buf.copy_from_host(zero_data);
         output_buf.copy_from_host(zero_data);
-        Resource resource(0);
+        Resource resource;
 
         // Stage 1: Scale by 2
         auto scale_kernel = [=](size_t i, const float *input, float *output) {
@@ -629,8 +629,8 @@ TEST_CASE("Backend Integration", "[backend][integration]") {
     std::vector<Resource> device_resources;
 
 #ifdef USE_SYCL
-    auto &sycl_manager = SYCL::Manager::devices();
-    num_devices = sycl_manager.size();
+    // Get device count from SYCL Manager
+    num_devices = SYCL::Manager::device_count();
     INFO("Number of SYCL devices available: " << num_devices);
 
     for (size_t i = 0; i < std::min(num_devices, size_t(2)); ++i) {
@@ -718,8 +718,8 @@ TEST_CASE("Backend Integration", "[backend][integration]") {
     std::vector<Resource> device_resources;
 
 #ifdef USE_SYCL
-    auto &sycl_manager = SYCL::Manager::devices();
-    num_devices = sycl_manager.size();
+    // Get device count from SYCL Manager
+    num_devices = SYCL::Manager::device_count();
     INFO("Number of SYCL devices available: " << num_devices);
 
     for (size_t i = 0; i < std::min(num_devices, size_t(2)); ++i) {
@@ -752,15 +752,15 @@ TEST_CASE("Backend Integration", "[backend][integration]") {
       UnifiedBuffer<float> unified_buf(total_size, device_resources[0]);
 
       // Apply memory advice before data transfer for optimal placement
-      INFO("Setting memory advice for device " << device_resources[0].id);
+      INFO("Setting memory advice for device " << device_resources[0].id());
       unified_buf.mem_advise(
-          0, device_resources[0].id); // Set preferred location to device 0
+          0, device_resources[0].id()); // Set preferred location to device 0
 
       unified_buf.copy_from_host(host_matrix);
 
       // Prefetch to device for computation (simulating kernel access)
       INFO("Prefetching matrix data to device for computation");
-      unified_buf.prefetch(device_resources[0].id);
+      unified_buf.prefetch(device_resources[0].id());
 
       // Access pattern: check some specific matrix elements
       INFO("Prefetching matrix data back to host for verification");
@@ -796,10 +796,10 @@ TEST_CASE("Backend Integration", "[backend][integration]") {
         UnifiedBuffer<float> unified_buf2(total_size, device_resources[1]);
 
         // Apply memory advice for optimal unified memory behavior
-        INFO("Applying memory advice for device " << device_resources[1].id);
+        INFO("Applying memory advice for device " << device_resources[1].id());
         unified_buf2.mem_advise(
-            0, device_resources[1].id);                // Set preferred location
-        unified_buf2.prefetch(device_resources[1].id); // Prefetch to device
+            0, device_resources[1].id()); // Set preferred location
+        unified_buf2.prefetch(device_resources[1].id()); // Prefetch to device
 
         // Copy data between unified buffers
         unified_buf2.copy_device_to_device(unified_buf, total_size);
@@ -831,13 +831,13 @@ TEST_CASE("Backend Integration", "[backend][integration]") {
         const size_t num_test_rows = 5;
         for (size_t row = 0; row < num_test_rows; ++row) {
           unified_buf2.advise_range(row * matrix_row_size, matrix_row_size,
-                                    device_resources[1].id, 0);
+                                    device_resources[1].id(), 0);
         }
 
         // Test prefetching specific matrix rows
         INFO("Prefetching first few matrix rows to device");
         unified_buf2.prefetch_range(0, num_test_rows * matrix_row_size,
-                                    device_resources[1].id);
+                                    device_resources[1].id());
       }
 
     } catch (const std::exception &e) {

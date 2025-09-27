@@ -153,7 +153,7 @@ TEST_CASE_METHOD(BackendInitFixture, "Pinned Buffer Memory Operations",
                  "[pinned][memory]") {
 
   SECTION("Host to pinned buffer transfer") {
-    Resource resource = Resource::Local();
+    Resource resource = Resource::create_sycl_device(0);
 
     // skip_if_sycl_on_macos();
 

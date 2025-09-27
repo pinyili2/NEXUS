@@ -2,6 +2,7 @@
 #include "Resource.h"
 
 #ifdef USE_CUDA
+#include "CUDA/CUDAManager.h"
 #include <cuda_runtime.h>
 #endif
 
@@ -85,7 +86,7 @@ void *Resource::get_stream(StreamType stream_type) const {
 
 #ifdef USE_CUDA
   if (type_ == ResourceType::CUDA) {
-    return reinterpret_cast<void *>(queues_->get_next_stream());
+    return reinterpret_cast<void *>(streams_->get_next_stream());
   }
 #endif
 
@@ -107,7 +108,7 @@ void *Resource::get_stream(size_t stream_id, StreamType stream_type) const {
 
 #ifdef USE_CUDA
   if (type_ == ResourceType::CUDA) {
-    return reinterpret_cast<void *>(queues_->get_stream(stream_id));
+    return reinterpret_cast<void *>(streams_->get_stream(stream_id));
   }
 #endif
 
@@ -122,9 +123,9 @@ void *Resource::get_stream(size_t stream_id, StreamType stream_type) const {
 
 void Resource::ensure_queues_initialized() const {
 #ifdef USE_CUDA
-  if (type_ == ResourceType::CUDA && !queues_) {
+  if (type_ == ResourceType::CUDA && !streams_) {
     // Device context is already activated by ensure_context()
-    queues_ = std::make_unique<CUDA::StreamPool>(static_cast<int>(id_));
+    streams_ = std::make_unique<CUDA::StreamPool>(static_cast<int>(id_));
   }
 #endif
 

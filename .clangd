@@ -19,6 +19,8 @@ CompileFlags:
 
   Remove:
     - -Wno-unknown-cuda-version
+    - -DUSE_METAL
+    - -DUSE_CUDA
 Diagnostics:
   Suppress:
     - drv_unknown_argument

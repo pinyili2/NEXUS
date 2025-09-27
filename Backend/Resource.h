@@ -69,7 +69,7 @@ private:
 
 // Stream pools owned by Resource (lazy initialization)
 #ifdef USE_CUDA
-  mutable std::unique_ptr<CUDA::StreamPool> queues_;
+  mutable std::unique_ptr<CUDA::StreamPool> streams_;
 #endif
 
 #ifdef USE_SYCL
@@ -129,6 +129,13 @@ public:
   void *get_stream(size_t stream_id,
                    StreamType stream_type = StreamType::Compute) const;
   void synchronize_streams() const;
+  inline void *get_queue(StreamType stream_type = StreamType::Compute) const {
+    get_stream(stream_type);
+  };
+  void *get_queue(size_t stream_id,
+                  StreamType stream_type = StreamType::Compute) const;
+
+  void synchronize_queues() const;
 
   // Properties
   ResourceType type() const { return type_; }

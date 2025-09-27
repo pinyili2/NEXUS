@@ -6,6 +6,9 @@
  * @date 2025-08-22
  */
 
+#define _GLIBCXX_USE_CXX11_ABI 1
+#include "Constants.h"
+
 #ifdef __CUDACC__
 #define HOST __host__
 #define DEVICE __device__
@@ -30,11 +33,13 @@
 #include <cuda_runtime.h>
 #endif
 
-#if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__METAL_VERSION__)
+#if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__) &&               \
+    !defined(__METAL_VERSION__)
 #define HOST_GUARD
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #ifndef __CUDACC__
 #include <experimental/simd>
 #include <type_traits>
@@ -51,12 +56,14 @@ namespace sx = std::experimental;
 #define ATOMIC_ADD(ptr, val) atomicAdd((ptr), (val))
 #elif defined(__SYCL_DEVICE_ONLY__)
 // For SYCL, we use sycl::atomic_ref
-#define ATOMIC_ADD(ptr, val) \
-	sycl::atomic_ref<float, sycl::memory_order::relaxed, sycl::memory_scope::device>(*(ptr)) += val
+#define ATOMIC_ADD(ptr, val)                                                   \
+  sycl::atomic_ref<float, sycl::memory_order::relaxed,                         \
+                   sycl::memory_scope::device>(*(ptr)) += val
 
 #elif defined(__METAL_VERSION__)
 #define ATOMIC_ADD(ptr, val)
-atomic_fetch_add_explicit(reinterpret_cast<device atomic_float*>(ptr), val, memory_order_relaxed)
+atomic_fetch_add_explicit(reinterpret_cast<device atomic_float *>(ptr), val,
+                          memory_order_relaxed)
 #else
 #define ATOMIC_ADD(ptr, val) (*(ptr) += (val))
 #endif
@@ -70,40 +77,37 @@ atomic_fetch_add_explicit(reinterpret_cast<device atomic_float*>(ptr), val, memo
 #ifdef __METAL_VERSION__
 #include <metal_stdlib>
 using namespace metal;
-template<typename T>
-using device_ptr = device T*;
-template<typename T>
-using constant_ptr = constant T*;
-template<typename T>
-using thread_ptr = thread T*;
-template<typename T>
-using threadgroup_ptr = threadgroup T*;
+template <typename T> using device_ptr = device T *;
+template <typename T> using constant_ptr = constant T *;
+template <typename T> using thread_ptr = thread T *;
+template <typename T> using threadgroup_ptr = threadgroup T *;
 #ifndef DEVICE_PTR
-#define DEVICE_PTR(T) device T*
+#define DEVICE_PTR(T) device T *
 #endif
 #ifndef CONSTANT_PTR
-#define CONSTANT_PTR(T) constant T*
+#define CONSTANT_PTR(T) constant T *
 #endif
 #ifndef THREAD_PTR
-#define THREAD_PTR(T) thread T*
+#define THREAD_PTR(T) thread T *
 #endif
 #ifndef THREADGROUP_PTR
-#define THREADGROUP_PTR(T) threadgroup T*
+#define THREADGROUP_PTR(T) threadgroup T *
 #endif
 #else
 // Address space pointer macros for non-Metal backends
 #ifndef DEVICE_PTR
-#define DEVICE_PTR(T) T*
+#define DEVICE_PTR(T) T *
 #endif
 #ifndef CONSTANT_PTR
-#define CONSTANT_PTR(T) const T*
+#define CONSTANT_PTR(T) const T *
 #endif
 #ifndef THREAD_PTR
-#define THREAD_PTR(T) T*
+#define THREAD_PTR(T) T *
 #endif
 #ifndef THREADGROUP_PTR
-#define THREADGROUP_PTR(T) T*
+#define THREADGROUP_PTR(T) T *
 #endif
 #endif
 using idx_t = size_t;
 using device_id_t = size_t;
+constexpr inline short NUM_QUEUES = 8;
