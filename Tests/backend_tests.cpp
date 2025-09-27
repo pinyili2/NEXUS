@@ -149,6 +149,11 @@ TEST_CASE("Resource Abstraction", "[backend][resource]") {
       void *memory_stream = resource.get_stream(StreamType::Memory);
       REQUIRE(compute_stream != nullptr);
       REQUIRE(memory_stream != nullptr);
+
+      // Verify dedicated stream mapping: StreamType should map to specific
+      // stream IDs
+      REQUIRE(compute_stream == stream_0); // Compute should use stream 0
+      REQUIRE(memory_stream == stream_1);  // Memory should use stream 1
     }
 
     REQUIRE_NOTHROW(resource.synchronize_streams());
@@ -492,6 +497,23 @@ TEST_CASE("Advanced Backend Features", "[backend][advanced]") {
 // ============================================================================
 // Backend Integration Tests
 // ============================================================================
+struct simple_kernel {
+  void operator()(size_t i, const float *input, float *output, float c) const {
+    output[i] = input[i] + c;
+  }
+};
+
+struct scale_kernel {
+  void operator()(size_t i, const float *input, float *output) const {
+    output[i] = input[i] * 2.0f;
+  }
+};
+
+struct add_kernel {
+  void operator()(size_t i, const float *input, float *output) const {
+    output[i] = input[i] + 10.0f;
+  }
+};
 
 TEST_CASE("Backend Integration", "[backend][integration]") {
   initialize_backend_once();
@@ -500,9 +522,10 @@ TEST_CASE("Backend Integration", "[backend][integration]") {
     if (g_backend_available) {
       try {
         const size_t n = 1000;
-        DeviceBuffer<float> input_buf(n, 0);
-        DeviceBuffer<float> temp_buf(n, 0);
-        DeviceBuffer<float> output_buf(n, 0);
+        short device_id = 0;
+        DeviceBuffer<float> input_buf(n, device_id);
+        DeviceBuffer<float> temp_buf(n, device_id);
+        DeviceBuffer<float> output_buf(n, device_id);
 
         // Initialize data
         std::vector<float> input_data(n);
@@ -513,28 +536,23 @@ TEST_CASE("Backend Integration", "[backend][integration]") {
         std::vector<float> zero_data(n, 0.0f);
         temp_buf.copy_from_host(zero_data);
         output_buf.copy_from_host(zero_data);
-        Resource resource;
+        Resource resource(device_id);
 
         // Stage 1: Scale by 2
-        auto scale_kernel = [=](size_t i, const float *input, float *output) {
-          output[i] = input[i] * 2.0f;
-        };
 
         KernelConfig config1 = KernelConfig::for_1d(n, resource);
         config1.sync = true;
-        auto event1 =
-            launch_kernel(resource, config1, scale_kernel, input_buf, temp_buf);
+        auto event1 = launch_kernel(resource, config1, scale_kernel{},
+                                    get_buffer_pointer(input_buf),
+                                    get_buffer_pointer(temp_buf));
 
         // Stage 2: Add 10
-        auto add_kernel = [=](size_t i, const float *input, float *output) {
-          output[i] = input[i] + 10.0f;
-        };
 
         KernelConfig config2 = KernelConfig::for_1d(n, resource);
         config2.sync = true;
         config2.dependencies.add(event1);
-        auto event2 =
-            launch_kernel(resource, config2, add_kernel, temp_buf, output_buf);
+        auto event2 = launch_kernel(resource, config2, add_kernel{}, temp_buf,
+                                    get_buffer_pointer(output_buf));
 
         event2.wait();
 
@@ -564,8 +582,9 @@ TEST_CASE("Backend Integration", "[backend][integration]") {
   SECTION("Performance characteristics") {
     if (g_backend_available) {
       const size_t n = 10000;
-      DeviceBuffer<float> input_buf(n, 0);
-      DeviceBuffer<float> output_buf(n, 0);
+      short device_id = 0;
+      DeviceBuffer<float> input_buf(n, device_id);
+      DeviceBuffer<float> output_buf(n, device_id);
 
       std::vector<float> input_data(n, 1.0f);
       input_buf.copy_from_host(input_data);
@@ -574,11 +593,9 @@ TEST_CASE("Backend Integration", "[backend][integration]") {
       std::vector<float> zero_data(n, 0.0f);
       output_buf.copy_from_host(zero_data);
 
-      auto simple_kernel = [](size_t i, const float *input, float *output) {
-        output[i] = input[i] + 1.0f;
-      };
-
-      Resource resource;
+      Resource resource(device_id);
+      INFO("Using backend: " << resource.getTypeString() << " device "
+                             << resource.id());
       KernelConfig config = KernelConfig::for_1d(n, resource);
       config.sync = true;
 
@@ -587,8 +604,9 @@ TEST_CASE("Backend Integration", "[backend][integration]") {
       auto start = std::chrono::high_resolution_clock::now();
 
       for (int i = 0; i < num_launches; ++i) {
-        auto event = launch_kernel(resource, config, simple_kernel, input_buf,
-                                   output_buf);
+        auto event = launch_kernel(resource, config, simple_kernel{},
+                                   get_buffer_pointer(input_buf),
+                                   get_buffer_pointer(output_buf), 3.0f);
         event.wait();
       }
 
@@ -600,7 +618,18 @@ TEST_CASE("Backend Integration", "[backend][integration]") {
       std::vector<float> result(n);
       output_buf.copy_to_host(result);
 
+      // Debug: Print first few results to see what we actually got
+      INFO("First 5 results: " << result[0] << ", " << result[1] << ", "
+                               << result[2] << ", " << result[3] << ", "
+                               << result[4]);
+      INFO("Expected: 2.0f for all elements");
+
       for (size_t i = 0; i < n; ++i) {
+        if (std::abs(result[i] - 2.0f) >= 1e-6f) {
+          INFO("Mismatch at index "
+               << i << ": got " << result[i]
+               << ", expected 2.0f, diff = " << std::abs(result[i] - 2.0f));
+        }
         REQUIRE(std::abs(result[i] - 2.0f) < 1e-6f);
       }
 
@@ -654,7 +683,8 @@ TEST_CASE("Backend Integration", "[backend][integration]") {
 
     // Step 1: Create buffer on host and copy to device 1
     INFO("Step 1: Host → Device 1");
-    DeviceBuffer<float> device1_buf(n, device_resources[0]);
+    short device_id = 0;
+    DeviceBuffer<float> device1_buf(n, device_id);
     device1_buf.copy_from_host(host_data);
 
     // Verify device 1 has correct data
@@ -669,7 +699,7 @@ TEST_CASE("Backend Integration", "[backend][integration]") {
 
     // Step 2: Copy from device 1 to device 2
     INFO("Step 2: Device 1 → Device 2");
-    DeviceBuffer<float> device2_buf(n, device_resources[1]);
+    DeviceBuffer<float> device2_buf(n, device_id);
     device2_buf.copy_device_to_device(device1_buf, n);
 
     // Verify device 2 has correct data
@@ -749,7 +779,8 @@ TEST_CASE("Backend Integration", "[backend][integration]") {
     // Test with Unified buffer (if available)
     try {
       INFO("Testing with Unified buffer on device 0");
-      UnifiedBuffer<float> unified_buf(total_size, device_resources[0]);
+      short device_id = 0;
+      UnifiedBuffer<float> unified_buf(total_size, device_id);
 
       // Apply memory advice before data transfer for optimal placement
       INFO("Setting memory advice for device " << device_resources[0].id());
@@ -845,7 +876,8 @@ TEST_CASE("Backend Integration", "[backend][integration]") {
 
       // Fallback to regular DeviceBuffer test
       INFO("Falling back to DeviceBuffer test");
-      DeviceBuffer<float> device_buf(total_size, device_resources[0]);
+      short device_id = 0;
+      DeviceBuffer<float> device_buf(total_size, device_id);
       device_buf.copy_from_host(host_matrix);
 
       std::vector<float> verify_device(total_size);

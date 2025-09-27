@@ -10,7 +10,7 @@
 
 namespace ARBD::CUDA {
 
-class StreamPool {
+class InitStreams {
 private:
   static constexpr size_t NUM_STREAMS = NUM_QUEUES;
   std::array<cudaStream_t, NUM_STREAMS> streams_;
@@ -19,17 +19,17 @@ private:
   bool initialized_{false};
 
 public:
-  explicit StreamPool(int device_id) : device_id_(device_id) {
+  explicit InitStreams(int device_id) : device_id_(device_id) {
     initialize_streams();
   }
 
-  ~StreamPool() { cleanup_streams(); }
+  ~InitStreams() { cleanup_streams(); }
 
   // Get next stream in round-robin fashion
   cudaStream_t get_next_stream() {
     if (!initialized_) {
       ARBD_Exception(ExceptionType::RuntimeError,
-                     "StreamPool not initialized for device {}", device_id_);
+                     "InitStreams not initialized for device {}", device_id_);
     }
     size_t idx = next_index_.fetch_add(1) % NUM_STREAMS;
     return streams_[idx];
@@ -39,7 +39,7 @@ public:
   cudaStream_t get_stream(size_t stream_id) {
     if (!initialized_) {
       ARBD_Exception(ExceptionType::RuntimeError,
-                     "StreamPool not initialized for device {}", device_id_);
+                     "InitStreams not initialized for device {}", device_id_);
     }
     return streams_[stream_id % NUM_STREAMS];
   }
@@ -101,11 +101,11 @@ private:
   }
 
   // Prevent copying
-  StreamPool(const StreamPool &) = delete;
-  StreamPool &operator=(const StreamPool &) = delete;
+  InitStreams(const InitStreams &) = delete;
+  InitStreams &operator=(const InitStreams &) = delete;
 
   // Allow moving
-  StreamPool(StreamPool &&other) noexcept
+  InitStreams(InitStreams &&other) noexcept
       : streams_(std::move(other.streams_)),
         next_index_(other.next_index_.load()), device_id_(other.device_id_),
         initialized_(other.initialized_) {

@@ -11,7 +11,52 @@ namespace ARBD {
 // ============================================================================
 // Device Context Management
 // ============================================================================
+void *Resource::get_stream_impl(StreamType stream_type) const {
+  if (type_ == ResourceType::CPU)
+    return nullptr;
 
+  ensure_context();
+  ensure_queues_initialized();
+
+  // Map StreamType to dedicated stream ID
+  short stream_id = static_cast<short>(stream_type);
+
+#ifdef USE_CUDA
+  if (type_ == ResourceType::CUDA) {
+    return reinterpret_cast<void *>(streams_->get_stream(stream_id));
+  }
+#endif
+
+#ifdef USE_SYCL
+  if (type_ == ResourceType::SYCL) {
+    return &streams_->get_queue(stream_id);
+  }
+#endif
+
+  return nullptr;
+}
+void *Resource::get_stream_impl(size_t stream_id,
+                                StreamType stream_type) const {
+  if (type_ == ResourceType::CPU)
+    return nullptr;
+
+  ensure_context();
+  ensure_queues_initialized();
+
+#ifdef USE_CUDA
+  if (type_ == ResourceType::CUDA) {
+    return reinterpret_cast<void *>(streams_->get_stream(stream_id));
+  }
+#endif
+
+#ifdef USE_SYCL
+  if (type_ == ResourceType::SYCL) {
+    return &streams_->get_queue(stream_id);
+  }
+#endif
+
+  return nullptr;
+}
 void Resource::ensure_context() const {
   if (!device_verified_) {
     device_available_ = verify_device();
@@ -41,8 +86,7 @@ void Resource::activate() const {
 
 #ifdef USE_SYCL
   if (type_ == ResourceType::SYCL) {
-    // SYCL device context is managed through queues
-    // No global device switching needed
+
     return;
   }
 #endif
@@ -70,69 +114,18 @@ bool Resource::verify_device() const {
   return false;
 }
 
-// ============================================================================
-// Stream Management (Resource owns streams)
-// ============================================================================
-
-void *Resource::get_stream(StreamType stream_type) const {
-  if (type_ == ResourceType::CPU)
-    return nullptr;
-
-  // Ensure device is available and activated
-  ensure_context();
-
-  // Initialize streams if needed (on correct device)
-  ensure_queues_initialized();
-
-#ifdef USE_CUDA
-  if (type_ == ResourceType::CUDA) {
-    return reinterpret_cast<void *>(streams_->get_next_stream());
-  }
-#endif
-
-#ifdef USE_SYCL
-  if (type_ == ResourceType::SYCL) {
-    return &queues_->get_next_queue();
-  }
-#endif
-
-  return nullptr;
-}
-
-void *Resource::get_stream(size_t stream_id, StreamType stream_type) const {
-  if (type_ == ResourceType::CPU)
-    return nullptr;
-
-  ensure_context();
-  ensure_queues_initialized();
-
-#ifdef USE_CUDA
-  if (type_ == ResourceType::CUDA) {
-    return reinterpret_cast<void *>(streams_->get_stream(stream_id));
-  }
-#endif
-
-#ifdef USE_SYCL
-  if (type_ == ResourceType::SYCL) {
-    return &queues_->get_queue(stream_id);
-  }
-#endif
-
-  return nullptr;
-}
-
 void Resource::ensure_queues_initialized() const {
 #ifdef USE_CUDA
   if (type_ == ResourceType::CUDA && !streams_) {
     // Device context is already activated by ensure_context()
-    streams_ = std::make_unique<CUDA::StreamPool>(static_cast<int>(id_));
+    streams_ = std::make_shared<CUDA::InitStreams>(static_cast<int>(id_));
   }
 #endif
 
 #ifdef USE_SYCL
-  if (type_ == ResourceType::SYCL && !queues_) {
+  if (type_ == ResourceType::SYCL && !streams_) {
     auto device = SYCL::Manager::get_device_by_id(id_);
-    queues_ = std::make_unique<SYCL::QueuePool>(device);
+    streams_ = std::make_shared<SYCL::InitQueues>(device);
   }
 #endif
 }
@@ -141,7 +134,7 @@ void Resource::synchronize_streams() const {
   if (type_ == ResourceType::CPU)
     return;
   else {
-    queues_->synchronize_all();
+    streams_->synchronize_all();
   }
 }
 

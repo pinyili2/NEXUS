@@ -35,7 +35,6 @@
 #include "ARBDLogger.h"
 #include "Events.h"
 #include "Header.h"
-#include "Pool.h"
 #include "Resource.h"
 
 namespace ARBD {
@@ -123,9 +122,9 @@ protected:
                     // be identical for host and device)
   T *device_ptr_{nullptr}; // Device memory pointer
   T *host_ptr_{nullptr};   // Host memory pointer
-  void *queue_{nullptr};   // Queue/Stream pointer
-  bool sync_{false};       // Sync flag
-
+  void *stream_{nullptr};
+  bool sync_{false}; // Sync flag
+  StreamType stream_type_{StreamType::Memory};
   BufferAccess buffer_access_{BufferAccess::read_write};
 
 public:
@@ -140,38 +139,41 @@ public:
   explicit Buffer(size_t count)
       : count_(count), resource_(get_device_resource(0)) {
     if (count_ > 0) {
-      queue_ = resource_.get_stream(); // Acquire stream from resource
-      allocate_on_resource(resource_, count_, queue_, sync_);
+      stream_ =
+          resource_.get_stream(stream_type_); // Use Memory stream by default
+      allocate_on_resource(resource_, count_, stream_, sync_);
     }
   }
   explicit Buffer(size_t count, short device_id)
       : count_(count), resource_(get_device_resource(device_id)) {
     if (count_ > 0) {
-      queue_ = resource_.get_stream(); // Acquire stream from resource
-      allocate_on_resource(resource_, count_, queue_, sync_);
+      stream_ =
+          resource_.get_stream(stream_type_); // Use Memory stream by default
+      allocate_on_resource(resource_, count_, stream_, sync_);
     }
   }
-  // Constructor with resource (uses default queue)
+  // Constructor with resource (uses Memory stream by default)
   explicit Buffer(size_t count, const Resource &resource)
       : count_(count), resource_(resource) {
     if (count_ > 0) {
-      queue_ = resource_.get_stream(); // Acquire stream from resource
-      allocate_on_resource(resource_, count_, queue_, sync_);
+      stream_ =
+          resource_.get_stream(stream_type_); // Use Memory stream by default
+      allocate_on_resource(resource_, count_, stream_, sync_);
     }
   }
   explicit Buffer(size_t count, short device_id, void *queue, bool sync = false)
-      : count_(count), resource_(get_device_resource(device_id)), queue_(queue),
-        sync_(sync) {
+      : count_(count), resource_(get_device_resource(device_id)),
+        stream_(queue), sync_(sync) {
     if (count_ > 0) {
-      allocate_on_resource(resource_, count_, queue_, sync_);
+      allocate_on_resource(resource_, count_, stream_, sync_);
     }
   }
   // Constructor with resource and queue
   explicit Buffer(size_t count, const Resource &resource, void *queue,
                   bool sync = false)
-      : count_(count), resource_(resource), queue_(queue), sync_(sync) {
+      : count_(count), resource_(resource), stream_(queue), sync_(sync) {
     if (count_ > 0) {
-      allocate_on_resource(resource_, count_, queue_, sync_);
+      allocate_on_resource(resource_, count_, stream_, sync_);
     }
   }
   ~Buffer() { deallocate(); }
@@ -190,9 +192,10 @@ public:
   Buffer(const Buffer &other, const Resource &resource)
       : count_(other.count_), resource_(resource) {
     if (count_ > 0) {
-      queue_ = resource_.get_stream(); // Acquire stream from resource
-      allocate_on_resource(resource_, count_, queue_, sync_);
-      copy_device_to_device(other, count_);
+      stream_ =
+          resource_.get_stream(stream_type_); // Use Memory stream by default
+      allocate_on_resource(resource_, count_, stream_, sync_);
+      copy_device_to_device(other, count_, stream_);
     }
   }
 
@@ -202,9 +205,10 @@ public:
   Buffer(const Buffer &other)
       : resource_(other.resource_), count_(other.count_) {
     if (count_ > 0) {
-      queue_ = resource_.get_stream(); // Acquire stream from resource
-      allocate_on_resource(resource_, count_, queue_, sync_);
-      copy_device_to_device(other, count_);
+      stream_ =
+          resource_.get_stream(stream_type_); // Use Memory stream by default
+      allocate_on_resource(resource_, count_, stream_, sync_);
+      copy_device_to_device(other, count_, stream_);
     }
   }
 
@@ -217,9 +221,10 @@ public:
       resource_ = other.resource_;
       count_ = other.count_;
       if (count_ > 0) {
-        queue_ = resource_.get_stream(); // Acquire stream from resource
-        allocate_on_resource(resource_, count_, queue_, sync_);
-        copy_device_to_device(other, count_);
+        stream_ =
+            resource_.get_stream(stream_type_); // Use Memory stream by default
+        allocate_on_resource(resource_, count_, stream_, sync_);
+        copy_device_to_device(other, count_, stream_);
       }
     }
     return *this;
@@ -227,11 +232,11 @@ public:
   // Move constructor
   Buffer(Buffer &&other) noexcept
       : resource_(other.resource_), count_(other.count_),
-        device_ptr_(other.device_ptr_), queue_(other.queue_),
+        device_ptr_(other.device_ptr_), stream_(other.stream_),
         sync_(other.sync_) {
     other.count_ = 0;
     other.device_ptr_ = nullptr;
-    other.queue_ = nullptr;
+    other.stream_ = nullptr;
     other.resource_ = Resource{};
     other.sync_ = false;
   }
@@ -243,25 +248,26 @@ public:
       resource_ = other.resource_;
       count_ = other.count_;
       device_ptr_ = other.device_ptr_;
-      queue_ = other.queue_;
+      stream_ = other.stream_;
       sync_ = other.sync_;
       other.count_ = 0;
       other.device_ptr_ = nullptr;
-      other.queue_ = nullptr;
+      other.stream_ = nullptr;
       other.resource_ = Resource{};
     }
     return *this;
   }
 
   // Set queue for async operations
-  void set_queue(void *queue) { queue_ = queue; }
-  void *get_queue() const { return queue_; }
+  void set_queue(void *queue) { stream_ = queue; }
+  void *get_queue() const { return stream_; }
 
   void create(size_t count, const Resource &resource) {
     resource_ = resource;
     count_ = count;
-    queue_ = resource_.get_stream(); // Acquire stream from resource
-    allocate_on_resource(resource_, count_, queue_, sync_);
+    stream_ =
+        resource_.get_stream(stream_type_); // Use Memory stream by default
+    allocate_on_resource(resource_, count_, stream_, sync_);
   }
 
   /**
@@ -277,8 +283,8 @@ public:
       return; // No change needed
     }
 
-    // Get the new queue for the target resource
-    void *new_queue = target_resource.get_stream();
+    // Get the new queue for the target resource (use Memory stream)
+    void *new_queue = target_resource.get_stream(stream_type_);
 
     // First, try to allocate the new buffer.
     T *new_ptr = nullptr;
@@ -318,7 +324,7 @@ public:
     device_ptr_ = new_ptr;
     count_ = count;
     resource_ = target_resource;
-    queue_ = new_queue; // Update queue for new resource
+    stream_ = new_queue; // Update queue for new resource
   }
 
   /**
@@ -397,8 +403,14 @@ public:
     if (!device_ptr_) {
       ARBD_Exception(ExceptionType::ValueError, "Cannot copy from null buffer");
     }
+    // Ensure we have a valid stream for the operation
+    void *active_stream = stream_;
+    if (!active_stream) {
+      active_stream = resource_.get_stream(stream_type_);
+    }
+
     Policy::copy_to_host(host_dst, device_ptr_, num_elements * sizeof(T),
-                         queue_, sync);
+                         active_stream, sync);
 #if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__) &&               \
     !defined(__METAL_VERSION__)
     LOGTRACE("Copied {} bytes to host from {} ({}sync)",
@@ -414,7 +426,8 @@ public:
    */
   void *copy_to_host_async(T *host_dst, size_t num_elements) const {
     copy_to_host(host_dst, num_elements, false);
-    return queue_;
+    // Return the active stream (may be different from stream_ if it was null)
+    return stream_ ? stream_ : resource_.get_stream(stream_type_);
   }
 
   /**
@@ -462,8 +475,14 @@ public:
       ARBD_Exception(ExceptionType::ValueError,
                      "Cannot copy from null host pointer");
     }
+    // Ensure we have a valid stream for the operation
+    void *active_stream = stream_;
+    if (!active_stream) {
+      active_stream = resource_.get_stream(stream_type_);
+    }
+
     Policy::copy_from_host(device_ptr_, host_src, num_elements * sizeof(T),
-                           queue_, sync);
+                           active_stream, sync);
 #if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__) &&               \
     !defined(__METAL_VERSION__)
     LOGTRACE("Copied {} bytes from host to {} ({}sync)",
@@ -479,7 +498,8 @@ public:
    */
   void *copy_from_host_async(const T *host_src, size_t num_elements) {
     copy_from_host(host_src, num_elements, false);
-    return queue_;
+    // Return the active stream (may be different from stream_ if it was null)
+    return stream_ ? stream_ : resource_.get_stream(stream_type_);
   }
 
   /**
@@ -515,9 +535,16 @@ public:
       ARBD_Exception(ExceptionType::ValueError,
                      "Cannot copy with null buffer(s)");
     }
+    // Ensure we have a valid stream for the operation
+    void *active_stream = stream_;
+    if (!active_stream) {
+      active_stream = resource_.get_stream(stream_type_);
+    }
+
     bool use_sync = sync; // Use provided sync parameter
     Policy::copy_device_to_device(device_ptr_, src.device_ptr_,
-                                  num_elements * sizeof(T), queue_, use_sync);
+                                  num_elements * sizeof(T), active_stream,
+                                  use_sync);
 #if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__) &&               \
     !defined(__METAL_VERSION__)
     LOGTRACE("Copied {} bytes device-to-device from {} to {} ({}sync)",
@@ -534,7 +561,8 @@ public:
    */
   void *copy_device_to_device_async(const Buffer &src, size_t num_elements) {
     copy_device_to_device(src, num_elements, false);
-    return queue_;
+    // Return the active stream (may be different from stream_ if it was null)
+    return stream_ ? stream_ : resource_.get_stream(stream_type_);
   }
 
   /**
@@ -582,7 +610,7 @@ private:
    * @brief Create an Event from the current stream.
    */
   Event create_event_from_stream() const {
-    if (!queue_) {
+    if (!stream_) {
       return Event(nullptr, resource_);
     }
 
@@ -590,7 +618,7 @@ private:
     if (resource_.type() == ResourceType::CUDA) {
       cudaEvent_t event;
       CUDA_CHECK(cudaEventCreate(&event));
-      CUDA_CHECK(cudaEventRecord(event, static_cast<cudaStream_t>(queue_)));
+      CUDA_CHECK(cudaEventRecord(event, static_cast<cudaStream_t>(stream_)));
       return Event(event, resource_);
     }
 #endif
@@ -598,8 +626,8 @@ private:
 #ifdef USE_SYCL
     if (resource_.type() == ResourceType::SYCL) {
       // For AdaptiveCpp, submit a simple single_task operation
-      sycl::queue *q = static_cast<sycl::queue *>(queue_);
-      auto event = q->submit([&](sycl::handler &h) {
+      sycl::queue &q = *static_cast<sycl::queue *>(stream_);
+      auto event = q.submit([&](sycl::handler &h) {
         h.single_task([]() {
           // Empty single task to create a valid event
         });
@@ -647,15 +675,15 @@ public:
     encoder->setBuffer(metal_buffer, 0, index);
   }
 #endif
-  static Buffer create(size_t count, const Buffer *pool = nullptr) {
-    // This version now uses your custom memory pool for allocation.
-    // It creates a new buffer and allocates the required memory from the pool.
+  static Buffer create(size_t count, int device_id,
+                       const Buffer *pool = nullptr) {
     Buffer new_buffer;
-    new_buffer.resource_ = pool ? pool->resource() : get_device_resource(0);
+    new_buffer.resource_ =
+        pool ? pool->resource() : get_device_resource(device_id);
 
-    // Allocate memory from your global temporary pool
-    new_buffer.device_ptr_ = static_cast<T *>(ARBD::get_temp_pool().allocate(
-        count * sizeof(T), new_buffer.resource_));
+    // Allocate memory directly
+    new_buffer.device_ptr_ = static_cast<T *>(Policy::allocate(
+        new_buffer.resource_, count * sizeof(T), nullptr, true));
     new_buffer.count_ = count;
 
     return new_buffer;
@@ -701,7 +729,7 @@ private:
 
   void deallocate() {
     if (device_ptr_) {
-      Policy::deallocate(device_ptr_, queue_, sync_);
+      Policy::deallocate(device_ptr_, stream_, sync_);
       device_ptr_ = nullptr;
 #ifdef HOST_GUARD
       LOGTRACE("Deallocated buffer on {}", resource_.toString());
@@ -720,12 +748,12 @@ public:
   void upload_to_device(const T *host_src, size_t num_elements) {
     Policy::upload_to_device(this->device_ptr_, host_src,
                              num_elements * sizeof(T), this->resource_,
-                             this->queue_);
+                             this->stream_);
   }
   void download_from_device(T *host_dst, size_t num_elements) {
     Policy::download_from_device(host_dst, this->device_ptr_,
                                  num_elements * sizeof(T), this->resource_,
-                                 this->queue_);
+                                 this->stream_);
   }
 
   // Override copy_from_host to use pinned buffer's own methods

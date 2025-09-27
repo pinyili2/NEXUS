@@ -46,6 +46,7 @@ message(STATUS "Added backend comprehensive test executable: test_backend")
 
 # Backend comprehensive tests - platform independent, tests all backend abstractions
 add_executable(test_kernel
+    kernels.cpp
     ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
 )
 target_include_directories(test_kernel PRIVATE ${CMAKE_SOURCE_DIR}/src)
@@ -63,6 +64,9 @@ message(STATUS "Added backend comprehensive test executable: test_kernel")
 
 # Buffer tests - comprehensive buffer operations and device transfers
 add_executable(test_buffer
+    production_buffer_tests.cpp
+    async_buffer_tests.cpp
+    pinned_unified_tests.cpp
     ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
 )
 target_include_directories(test_buffer PRIVATE ${CMAKE_SOURCE_DIR})

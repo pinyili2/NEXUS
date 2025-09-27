@@ -17,13 +17,13 @@ namespace ARBD {
  */
 template <typename Functor, typename... Args>
 Event launch_sycl_kernel(const Resource &resource, const KernelConfig &config,
-                         Functor kernel_func, Args... args) {
+                         Functor kernel_functor, Args... args) {
   if (config.dim == 1) {
-    return launch_sycl_kernel_1d(resource, config, kernel_func, args...);
+    return launch_sycl_kernel_1d(resource, config, kernel_functor, args...);
   } else if (config.dim == 2) {
-    return launch_sycl_kernel_2d(resource, config, kernel_func, args...);
+    return launch_sycl_kernel_2d(resource, config, kernel_functor, args...);
   } else if (config.dim == 3) {
-    return launch_sycl_kernel_3d(resource, config, kernel_func, args...);
+    return launch_sycl_kernel_3d(resource, config, kernel_functor, args...);
   } else {
     throw_value_error("Invalid dimension for SYCL kernel launch");
   }
@@ -31,12 +31,10 @@ Event launch_sycl_kernel(const Resource &resource, const KernelConfig &config,
 
 template <typename Functor, typename... Args>
 Event launch_sycl_kernel_1d(const Resource &resource,
-                            const KernelConfig &config, Functor kernel_func,
+                            const KernelConfig &config, Functor kernel_functor,
                             Args... args) {
 
-  auto *queue_wrapper_ptr =
-      static_cast<ARBD::SYCL::Queue *>(resource.get_stream());
-  sycl::queue &queue = queue_wrapper_ptr->get();
+  sycl::queue &queue = *static_cast<sycl::queue *>(resource.get_stream());
   idx_t local_range_sycl = std::min(config.block_size.x, config.problem_size.x);
   idx_t global_range_sycl =
       ((config.problem_size.x + local_range_sycl - 1) / local_range_sycl) *
@@ -67,7 +65,7 @@ Event launch_sycl_kernel_1d(const Resource &resource,
 
       if (gx < problem_size_x) {
         size_t i = gx;
-        kernel_func(i, args...);
+        kernel_functor(i, args...);
       }
     });
   });
@@ -84,7 +82,7 @@ Event launch_sycl_kernel_1d(const Resource &resource,
 
 template <typename Functor, typename... Args>
 Event launch_sycl_kernel_2d(const Resource &resource,
-                            const KernelConfig &config, Functor kernel_func,
+                            const KernelConfig &config, Functor kernel_functor,
                             Args... args) {
   // Ensure standardized problem/grid/block are available
   KernelConfig local_config = config;
@@ -98,9 +96,7 @@ Event launch_sycl_kernel_2d(const Resource &resource,
   }
 
   // Get queue from config or resource
-  auto *queue_wrapper_ptr =
-      static_cast<ARBD::SYCL::Queue *>(resource.get_stream());
-  sycl::queue &queue = queue_wrapper_ptr->get();
+  sycl::queue &queue = *static_cast<sycl::queue *>(resource.get_stream());
 
   // Ensure global range is divisible by local range to avoid non-uniform
   // work-groups SYCL 2D: (y, x) mapping to maintain x as fastest varying
@@ -134,7 +130,7 @@ Event launch_sycl_kernel_2d(const Resource &resource,
       if (gx < problem_size_x && gy < problem_size_y) {
         // Calculate linear index from 2D coordinates using problem size
         idx_t i = gy * problem_size_x + gx;
-        kernel_func(i, args...); // Only pass linear index, not coordinates
+        kernel_functor(i, args...); // Only pass linear index, not coordinates
       }
     });
   });
@@ -149,7 +145,7 @@ Event launch_sycl_kernel_2d(const Resource &resource,
 
 template <typename Functor, typename... Args>
 Event launch_sycl_kernel_3d(const Resource &resource,
-                            const KernelConfig &config, Functor kernel_func,
+                            const KernelConfig &config, Functor kernel_functor,
                             Args... args) {
   // Ensure standardized problem/grid/block are available
   KernelConfig local_config = config;
@@ -166,9 +162,7 @@ Event launch_sycl_kernel_3d(const Resource &resource,
   }
 
   // Get queue from config or resource
-  auto *queue_wrapper_ptr =
-      static_cast<ARBD::SYCL::Queue *>(resource.get_stream());
-  sycl::queue &queue = queue_wrapper_ptr->get();
+  sycl::queue &queue = *static_cast<sycl::queue *>(resource.get_stream());
 
   // Ensure global range is divisible by local range to avoid non-uniform
   // work-groups SYCL 3D: (z, y, x) mapping where x is fastest varying (dim 2),
@@ -215,7 +209,7 @@ Event launch_sycl_kernel_3d(const Resource &resource,
       if (gx < problem_size_x && gy < problem_size_y && gz < problem_size_z) {
         // Calculate linear index from 3D coordinates using problem size
         idx_t i = (gz * problem_size_y + gy) * problem_size_x + gx;
-        kernel_func(i, args...); // Only pass linear index, not coordinates
+        kernel_functor(i, args...); // Only pass linear index, not coordinates
       }
     });
   });

@@ -35,7 +35,7 @@ namespace ARBD {
 
 template <typename Functor, typename... Args>
 Event launch_kernel(const Resource &resource, const KernelConfig &config,
-                    Functor kernel_func, Args... args) {
+                    Functor kernel_functor, Args... args) {
   // Auto-configure the kernel if grid_size is not set (default 0,0,0)
   KernelConfig local_config = config;
   local_config.validate_block_size(resource);
@@ -56,14 +56,14 @@ Event launch_kernel(const Resource &resource, const KernelConfig &config,
 
 #ifdef USE_CUDA
   if (resource.type() == ResourceType::CUDA) {
-    return launch_cuda_kernel(resource, local_config, kernel_func,
+    return launch_cuda_kernel(resource, local_config, kernel_functor,
                               get_buffer_pointer(args)...);
   }
 #endif
 
 #ifdef USE_SYCL
   if (resource.type() == ResourceType::SYCL) {
-    return launch_sycl_kernel(resource, local_config, kernel_func,
+    return launch_sycl_kernel(resource, local_config, kernel_functor,
                               get_buffer_pointer(args)...);
   }
 #endif
@@ -77,7 +77,7 @@ Event launch_kernel(const Resource &resource, const KernelConfig &config,
 #endif
 
   // CPU fallback
-  return launch_cpu_kernel(resource, local_config, kernel_func,
+  return launch_cpu_kernel(resource, local_config, kernel_functor,
                            get_buffer_pointer(args)...);
 }
 
@@ -90,9 +90,10 @@ Event launch_kernel(const Resource &resource, const KernelConfig &config,
  */
 template <typename Functor, typename... Args>
 Event launch_kernel_1d(const Resource &resource, idx_t thread_count,
-                       KernelConfig config, Functor kernel_func, Args... args) {
+                       KernelConfig config, Functor kernel_functor,
+                       Args... args) {
   config = KernelConfig::for_1d(thread_count, resource);
-  return launch_kernel(resource, config, kernel_func, args...);
+  return launch_kernel(resource, config, kernel_functor, args...);
 }
 
 /**
@@ -100,9 +101,10 @@ Event launch_kernel_1d(const Resource &resource, idx_t thread_count,
  */
 template <typename Functor, typename... Args>
 Event launch_kernel_2d(const Resource &resource, idx_t width, idx_t height,
-                       KernelConfig config, Functor kernel_func, Args... args) {
+                       KernelConfig config, Functor kernel_functor,
+                       Args... args) {
   config = KernelConfig::for_2d(width, height, resource);
-  return launch_kernel(resource, config, kernel_func, args...);
+  return launch_kernel(resource, config, kernel_functor, args...);
 }
 
 /**
@@ -110,10 +112,10 @@ Event launch_kernel_2d(const Resource &resource, idx_t width, idx_t height,
  */
 template <typename Functor, typename... Args>
 Event launch_kernel_3d(const Resource &resource, idx_t width, idx_t height,
-                       idx_t depth, KernelConfig config, Functor kernel_func,
+                       idx_t depth, KernelConfig config, Functor kernel_functor,
                        Args... args) {
   config = KernelConfig::for_3d(width, height, depth, resource);
-  return launch_kernel(resource, config, kernel_func, args...);
+  return launch_kernel(resource, config, kernel_functor, args...);
 }
 
 // ============================================================================
@@ -125,7 +127,7 @@ Event launch_kernel_3d(const Resource &resource, idx_t width, idx_t height,
  */
 template <typename Functor, typename... Args>
 Event launch_cpu_kernel(const Resource &resource, const KernelConfig &config,
-                        Functor kernel_func, Args... args) {
+                        Functor kernel_functor, Args... args) {
 
   config.dependencies.wait_all();
 
@@ -144,7 +146,7 @@ Event launch_cpu_kernel(const Resource &resource, const KernelConfig &config,
       idx_t start = t * chunk_size;
       idx_t end = std::min(start + chunk_size, thread_count);
       for (idx_t i = start; i < end; ++i) {
-        kernel_func(i, args...);
+        kernel_functor(i, args...);
       }
     });
   }
@@ -237,7 +239,7 @@ public:
   // Add kernel with direct arguments (zero overhead)
   template <typename Functor, typename... Args>
   size_t add_kernel(const std::string &name, idx_t thread_count,
-                    Functor kernel_func, const KernelConfig &base_config,
+                    Functor kernel_functor, const KernelConfig &base_config,
                     Args... args) {
 
     size_t node_id = nodes_.size();
@@ -246,7 +248,7 @@ public:
     auto launcher = [=, this]() -> Event {
       KernelConfig config = base_config;
       config.sync = false;
-      return launch_kernel(resource_, config, kernel_func, args...);
+      return launch_kernel(resource_, config, kernel_functor, args...);
     };
 
     nodes_.emplace_back(
@@ -268,8 +270,7 @@ public:
         record_cuda_graph();
       }
 
-      cudaStream_t stream =
-          static_cast<cudaStream_t>(resource_.get_stream_type());
+      cudaStream_t stream = static_cast<cudaStream_t>(resource_.get_stream());
       CUDA_CHECK(cudaGraphLaunch(cuda_graph_instance_, stream));
 
       cudaEvent_t completion_event;
@@ -388,7 +389,7 @@ public:
   }
 
   template <typename Functor, typename... Args>
-  KernelPipeline &then(idx_t thread_count, Functor kernel_func,
+  KernelPipeline &then(idx_t thread_count, Functor kernel_functor,
                        const KernelConfig &base_config, Args... args) {
 
     KernelConfig config = base_config;
@@ -396,7 +397,8 @@ public:
     config.dependencies = pipeline_events_;
     config.sync = false;
 
-    Event completion = launch_kernel(resource_, config, kernel_func, args...);
+    Event completion =
+        launch_kernel(resource_, config, kernel_functor, args...);
 
     pipeline_events_.clear();
     pipeline_events_.add(completion);

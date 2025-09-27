@@ -15,7 +15,7 @@
 #include "METAL/METALManager.h"
 #endif
 
-#ifdef HOST_GUARD
+#ifdef USD_CPU
 #include <thread>
 #endif
 
@@ -134,9 +134,9 @@ public:
 #endif
 
 #ifdef USE_CUDA
-    if (resource.type == ResourceType::CUDA) {
+    if (resource.type() == ResourceType::CUDA) {
       try {
-        auto &device = CUDA::Manager::devices()[resource.id];
+        auto &device = CUDA::Manager::get_device_by_id(resource.id());
         cudaDeviceProp prop;
         CUDA_CHECK(cudaGetDeviceProperties(&prop, device.id()));
 
@@ -221,7 +221,7 @@ public:
       }
     }
 #endif
-
+#ifdef USD_CPU
     // For CPU, any block size is technically fine since we use std::thread
     if (resource.type() == ResourceType::CPU) {
       const idx_t max_cpu_threads = std::thread::hardware_concurrency() * 4;
@@ -232,6 +232,7 @@ public:
         block_size.z = 1;
       }
     }
+#endif
   }
 
   /**
