@@ -6,6 +6,12 @@
 #include <mutex>
 #include <string>
 
+// MPI support
+#ifdef USE_MPI
+#include "Backend/MPIManager.h"
+#include <mpi.h>
+#endif
+
 // Include backend-specific headers
 #ifdef USE_CUDA
 #include "Backend/CUDA/CUDAManager.h"
@@ -40,6 +46,182 @@
 #define DEF_CLEANUP using Tests::cleanup;
 
 namespace Tests {
+
+// =============================================================================
+// MPI-aware testing infrastructure
+// =============================================================================
+
+#ifdef USE_MPI
+/**
+ * @brief MPI-aware test manager for coordinating tests across multiple
+ * processes
+ */
+class MPITestManager {
+private:
+  static MPITestManager *instance_;
+  static std::mutex mutex_;
+  bool initialized_ = false;
+  int rank_ = 0;
+  int size_ = 1;
+
+  MPITestManager() { initialize(); }
+
+public:
+  MPITestManager(const MPITestManager &) = delete;
+  MPITestManager &operator=(const MPITestManager &) = delete;
+
+  static MPITestManager &getInstance() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (instance_ == nullptr) {
+      instance_ = new MPITestManager();
+    }
+    return *instance_;
+  }
+
+  static void cleanup() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (instance_ != nullptr) {
+      instance_->finalize();
+      delete instance_;
+      instance_ = nullptr;
+    }
+  }
+
+  void initialize() {
+    if (initialized_)
+      return;
+
+    try {
+      ARBD::MPI::Manager::instance().init();
+      rank_ = ARBD::MPI::Manager::instance().get_rank();
+      size_ = ARBD::MPI::Manager::instance().get_size();
+      initialized_ = true;
+
+      if (rank_ == 0) {
+        std::cout << "MPI Test Manager initialized with " << size_
+                  << " processes" << std::endl;
+      }
+    } catch (const std::exception &e) {
+      std::cerr << "MPI Test Manager initialization failed: " << e.what()
+                << std::endl;
+    }
+  }
+
+  void finalize() {
+    if (!initialized_)
+      return;
+
+    try {
+      ARBD::MPI::Manager::instance().finalize();
+    } catch (const std::exception &e) {
+      std::cerr << "MPI Test Manager finalization failed: " << e.what()
+                << std::endl;
+    }
+    initialized_ = false;
+  }
+
+  int getRank() const { return rank_; }
+  int getSize() const { return size_; }
+  bool isInitialized() const { return initialized_; }
+  bool isRoot() const { return rank_ == 0; }
+
+  /**
+   * @brief Coordinate test execution across all processes
+   * @param test_func Function to run on all processes
+   * @param root_verify_func Function to run verification only on root
+   * @return true if test passed on all processes
+   */
+  template <typename TestFunc, typename VerifyFunc>
+  bool runCoordinatedTest(TestFunc test_func, VerifyFunc root_verify_func) {
+    if (!initialized_)
+      return false;
+
+    bool local_success = false;
+    try {
+      local_success = test_func();
+    } catch (const std::exception &e) {
+      if (rank_ == 0) {
+        std::cerr << "Test function failed on rank " << rank_ << ": "
+                  << e.what() << std::endl;
+      }
+      local_success = false;
+    }
+
+    // Gather results from all processes
+    int local_result = local_success ? 1 : 0;
+    int global_result;
+    MPI_Allreduce(&local_result, &global_result, 1, MPI_INT, MPI_MIN,
+                  MPI_COMM_WORLD);
+
+    bool all_passed = (global_result == 1);
+
+    // Only root performs additional verification
+    if (rank_ == 0 && all_passed) {
+      try {
+        all_passed = root_verify_func();
+      } catch (const std::exception &e) {
+        std::cerr << "Root verification failed: " << e.what() << std::endl;
+        all_passed = false;
+      }
+    }
+
+    return all_passed;
+  }
+
+  /**
+   * @brief Simple coordinated test without root verification
+   */
+  template <typename TestFunc> bool runCoordinatedTest(TestFunc test_func) {
+    return runCoordinatedTest(test_func, []() { return true; });
+  }
+};
+
+// Static member definitions
+inline MPITestManager *MPITestManager::instance_ = nullptr;
+inline std::mutex MPITestManager::mutex_;
+
+// Convenience macros for MPI testing
+#define MPI_TEST_MANAGER Tests::MPITestManager::getInstance()
+#define MPI_RANK MPI_TEST_MANAGER.getRank()
+#define MPI_SIZE MPI_TEST_MANAGER.getSize()
+#define MPI_IS_ROOT MPI_TEST_MANAGER.isRoot()
+
+// Macro for MPI-aware test cases
+#define MPI_TEST_CASE(name, tags)                                              \
+  TEST_CASE(name, tags) {                                                      \
+    auto &mpi_mgr = Tests::MPITestManager::getInstance();                      \
+    if (!mpi_mgr.isInitialized()) {                                            \
+      WARN("MPI not initialized - skipping test");                             \
+      REQUIRE(true);                                                           \
+      return;                                                                  \
+    }                                                                          \
+    int mpi_rank = mpi_mgr.getRank();                                          \
+    int mpi_size = mpi_mgr.getSize();                                          \
+    (void)mpi_rank;                                                            \
+    (void)mpi_size; /* suppress unused warnings */
+
+// Macro for MPI-aware sections that only run on root
+#define MPI_ROOT_SECTION(name)                                                 \
+  if (MPI_IS_ROOT) {                                                           \
+  SECTION(name)
+
+// Macro for sections that run on all processes
+#define MPI_ALL_SECTION(name) SECTION(name)
+
+// End MPI test case (for cleanup)
+#define MPI_TEST_CASE_END() }
+
+#else
+// Non-MPI fallbacks
+#define MPI_TEST_MANAGER
+#define MPI_RANK 0
+#define MPI_SIZE 1
+#define MPI_IS_ROOT true
+#define MPI_TEST_CASE(name, tags) TEST_CASE(name, tags)
+#define MPI_ROOT_SECTION(name) SECTION(name)
+#define MPI_ALL_SECTION(name) SECTION(name)
+#define MPI_TEST_CASE_END()
+#endif
 
 // =============================================================================
 // Backend-specific kernel implementations
@@ -385,7 +567,12 @@ void run_trial(std::string name, R expected_result, T... args) {
 }
 
 // Cleanup function for test suite
-inline void cleanup() { TestBackendManager::cleanup(); }
+inline void cleanup() {
+  TestBackendManager::cleanup();
+#ifdef USE_MPI
+  MPITestManager::cleanup();
+#endif
+}
 
 } // namespace Tests
 

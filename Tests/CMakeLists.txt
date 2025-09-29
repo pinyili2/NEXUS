@@ -82,6 +82,24 @@ set_tests_properties(Buffer_Tests PROPERTIES
 list(APPEND COMMON_TEST_EXECUTABLES test_buffer)
 message(STATUS "Added Buffer comprehensive test executable: test_buffer")
 
+# Texture tests - texture buffer operations
+add_executable(test_texture
+    texture_tests.cpp
+    ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
+)
+target_include_directories(test_texture PRIVATE ${CMAKE_SOURCE_DIR})
+target_link_libraries(test_texture PRIVATE "lib${PROJECT_NAME}")
+
+# Add Texture test
+add_test(NAME Texture_Tests COMMAND test_texture)
+set_tests_properties(Texture_Tests PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+# Add to common list
+list(APPEND COMMON_TEST_EXECUTABLES test_texture)
+message(STATUS "Added Texture test executable: test_texture")
+
 # Metal Tests
 if(USE_METAL AND APPLE)
     # Common Metal test settings
@@ -282,6 +300,167 @@ if(USE_MPI)
     # Add to common list
     list(APPEND COMMON_TEST_EXECUTABLES test_mpi)
     message(STATUS "Added MPI test executable: test_mpi with OpenMPI 5.0.7 support")
+
+    # Create MPI Multi-GPU test executable
+    add_executable(test_mpi_multi_gpu
+        mpi_multi_gpu_test.cpp
+        ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
+    )
+    target_include_directories(test_mpi_multi_gpu PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    target_link_libraries(test_mpi_multi_gpu PRIVATE "lib${PROJECT_NAME}")
+
+    # Link MPI libraries for multi-GPU test
+    if(CMAKE_CXX_COMPILER MATCHES "mpi")
+        # When using MPI compiler wrapper, linking is automatic
+        message(STATUS "MPI multi-GPU test linking handled automatically by compiler wrapper")
+    else()
+        # Manual MPI linking when not using wrapper
+        target_link_libraries(test_mpi_multi_gpu
+            PRIVATE
+            MPI::MPI_CXX
+        )
+        target_include_directories(test_mpi_multi_gpu
+            PRIVATE
+            ${MPI_CXX_INCLUDE_DIRS}
+        )
+        message(STATUS "Manually linked MPI libraries to multi-GPU test executable")
+    endif()
+
+    # Ensure MPI multi-GPU test uses only CXX, not CUDA compiler
+    set_target_properties(test_mpi_multi_gpu PROPERTIES
+        LINKER_LANGUAGE CXX
+        CUDA_SEPARABLE_COMPILATION OFF
+        CUDA_RESOLVE_DEVICE_SYMBOLS OFF
+    )
+
+    # Explicitly set this as a CXX-only target to avoid CUDA flag inheritance
+    set_source_files_properties(mpi_multi_gpu_test.cpp PROPERTIES LANGUAGE CXX)
+
+    # Fix C++ standard library linking issues (same as main executable)
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        target_link_libraries(test_mpi_multi_gpu PRIVATE -Wl,--whole-archive stdc++ -Wl,--no-whole-archive)
+        target_link_libraries(test_mpi_multi_gpu PRIVATE gcc_s gcc m pthread dl)
+        target_link_options(test_mpi_multi_gpu PRIVATE -Wl,--no-as-needed)
+    endif()
+
+    # Add MPI Multi-GPU tests
+    add_test(NAME MPI_Multi_GPU_Tests COMMAND test_mpi_multi_gpu)
+
+    # Create SYCL MPI test executable
+    add_executable(test_sycl_mpi
+        sycl_mpi_test.cpp
+        ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
+    )
+    target_include_directories(test_sycl_mpi PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    target_link_libraries(test_sycl_mpi PRIVATE "lib${PROJECT_NAME}")
+
+    # Link MPI libraries for SYCL MPI test
+    if(CMAKE_CXX_COMPILER MATCHES "mpi")
+        message(STATUS "SYCL MPI test linking handled automatically by compiler wrapper")
+    else()
+        target_link_libraries(test_sycl_mpi
+            PRIVATE
+            MPI::MPI_CXX
+        )
+        target_include_directories(test_sycl_mpi
+            PRIVATE
+            ${MPI_CXX_INCLUDE_DIRS}
+        )
+        message(STATUS "Manually linked MPI libraries to SYCL MPI test executable")
+    endif()
+
+    # Add SYCL MPI tests
+    add_test(NAME SYCL_MPI_Tests COMMAND test_sycl_mpi)
+
+    # Create Simple MPI test executable
+    add_executable(test_simple_mpi
+        simple_mpi_test.cpp
+        ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
+    )
+    target_include_directories(test_simple_mpi PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    target_link_libraries(test_simple_mpi PRIVATE "lib${PROJECT_NAME}")
+
+    # Link MPI libraries for Simple MPI test
+    if(CMAKE_CXX_COMPILER MATCHES "mpi")
+        message(STATUS "Simple MPI test linking handled automatically by compiler wrapper")
+    else()
+        target_link_libraries(test_simple_mpi
+            PRIVATE
+            MPI::MPI_CXX
+        )
+        target_include_directories(test_simple_mpi
+            PRIVATE
+            ${MPI_CXX_INCLUDE_DIRS}
+        )
+        message(STATUS "Manually linked MPI libraries to Simple MPI test executable")
+    endif()
+
+    # Add Simple MPI tests
+    add_test(NAME Simple_MPI_Tests COMMAND test_simple_mpi)
+
+    # Create Standalone MPI GPU test executable
+    add_executable(test_mpi_gpu_standalone
+        mpi_gpu_standalone_test.cpp
+    )
+    target_include_directories(test_mpi_gpu_standalone PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    target_link_libraries(test_mpi_gpu_standalone PRIVATE "lib${PROJECT_NAME}")
+
+    # Link MPI libraries for Standalone MPI GPU test
+    if(CMAKE_CXX_COMPILER MATCHES "mpi")
+        message(STATUS "Standalone MPI GPU test linking handled automatically by compiler wrapper")
+    else()
+        target_link_libraries(test_mpi_gpu_standalone
+            PRIVATE
+            MPI::MPI_CXX
+        )
+        target_include_directories(test_mpi_gpu_standalone
+            PRIVATE
+            ${MPI_CXX_INCLUDE_DIRS}
+        )
+        message(STATUS "Manually linked MPI libraries to Standalone MPI GPU test executable")
+    endif()
+
+    # Add Standalone MPI GPU tests
+    add_test(NAME Standalone_MPI_GPU_Tests COMMAND test_mpi_gpu_standalone)
+
+    # Create Raw MPI test executable
+    add_executable(test_raw_mpi
+        raw_mpi_test.cpp
+        sycl_mpi_comprehensive_test.cpp
+        ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
+    )
+    target_include_directories(test_raw_mpi PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    target_link_libraries(test_raw_mpi PRIVATE "lib${PROJECT_NAME}")
+
+    # Link MPI libraries for Raw MPI test
+    if(CMAKE_CXX_COMPILER MATCHES "mpi")
+        message(STATUS "Raw MPI test linking handled automatically by compiler wrapper")
+    else()
+        target_link_libraries(test_raw_mpi
+            PRIVATE
+            MPI::MPI_CXX
+        )
+        target_include_directories(test_raw_mpi
+            PRIVATE
+            ${MPI_CXX_INCLUDE_DIRS}
+        )
+        message(STATUS "Manually linked MPI libraries to Raw MPI test executable")
+    endif()
+
+    # Add Raw MPI tests
+    add_test(NAME Raw_MPI_Tests COMMAND test_raw_mpi)
+    set_tests_properties(MPI_Multi_GPU_Tests PROPERTIES
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    )
+
+    # Set test properties for OpenMPI 5.0.7 compatibility
+    set_tests_properties(MPI_Multi_GPU_Tests PROPERTIES
+        ENVIRONMENT "OMPI_ALLOW_RUN_AS_ROOT=1;OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1"
+    )
+
+    # Add to common list
+    list(APPEND COMMON_TEST_EXECUTABLES test_mpi_multi_gpu)
+    message(STATUS "Added MPI multi-GPU test executable: test_mpi_multi_gpu")
 endif()
 
 # Install all test executables at once
