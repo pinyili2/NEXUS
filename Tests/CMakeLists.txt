@@ -348,7 +348,6 @@ if(USE_MPI)
 
     # Create SYCL MPI test executable
     add_executable(test_sycl_mpi
-        sycl_mpi_test.cpp
         ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
     )
     target_include_directories(test_sycl_mpi PRIVATE ${CMAKE_SOURCE_DIR}/src)
@@ -371,32 +370,6 @@ if(USE_MPI)
 
     # Add SYCL MPI tests
     add_test(NAME SYCL_MPI_Tests COMMAND test_sycl_mpi)
-
-    # Create Simple MPI test executable
-    add_executable(test_simple_mpi
-        simple_mpi_test.cpp
-        ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
-    )
-    target_include_directories(test_simple_mpi PRIVATE ${CMAKE_SOURCE_DIR}/src)
-    target_link_libraries(test_simple_mpi PRIVATE "lib${PROJECT_NAME}")
-
-    # Link MPI libraries for Simple MPI test
-    if(CMAKE_CXX_COMPILER MATCHES "mpi")
-        message(STATUS "Simple MPI test linking handled automatically by compiler wrapper")
-    else()
-        target_link_libraries(test_simple_mpi
-            PRIVATE
-            MPI::MPI_CXX
-        )
-        target_include_directories(test_simple_mpi
-            PRIVATE
-            ${MPI_CXX_INCLUDE_DIRS}
-        )
-        message(STATUS "Manually linked MPI libraries to Simple MPI test executable")
-    endif()
-
-    # Add Simple MPI tests
-    add_test(NAME Simple_MPI_Tests COMMAND test_simple_mpi)
 
     # Create Standalone MPI GPU test executable
     add_executable(test_mpi_gpu_standalone
@@ -462,6 +435,87 @@ if(USE_MPI)
     list(APPEND COMMON_TEST_EXECUTABLES test_mpi_multi_gpu)
     message(STATUS "Added MPI multi-GPU test executable: test_mpi_multi_gpu")
 endif()
+
+# ========================================================================
+# OpenMP Multi-GPU Tests
+# ========================================================================
+
+# Force enable OpenMP with manual flags for icpx
+if(CMAKE_CXX_COMPILER MATCHES "icpx")
+    message(STATUS "Using icpx - manually enabling OpenMP")
+
+    # Create OpenMP Multi-GPU test executable
+    add_executable(test_omp_multi_gpu
+        omp_multi_gpu_test.cpp
+        ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
+    )
+    target_include_directories(test_omp_multi_gpu PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    target_link_libraries(test_omp_multi_gpu PRIVATE "lib${PROJECT_NAME}")
+
+    # Add OpenMP flags manually for icpx (use standard GCC-style flags)
+    target_compile_options(test_omp_multi_gpu PRIVATE -fopenmp)
+    target_link_options(test_omp_multi_gpu PRIVATE -fopenmp)
+
+    # Add OpenMP Multi-GPU tests
+    add_test(NAME OpenMP_Multi_GPU_Tests COMMAND test_omp_multi_gpu)
+    set_tests_properties(OpenMP_Multi_GPU_Tests PROPERTIES
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    )
+
+    # Add to common list
+    list(APPEND COMMON_TEST_EXECUTABLES test_omp_multi_gpu)
+    message(STATUS "Added OpenMP multi-GPU test executable: test_omp_multi_gpu")
+
+else()
+    # Find OpenMP for non-icpx compilers
+    find_package(OpenMP)
+
+    if(OpenMP_CXX_FOUND)
+        message(STATUS "OpenMP found - building OpenMP multi-GPU tests")
+
+        # Create OpenMP Multi-GPU test executable
+        add_executable(test_omp_multi_gpu
+            omp_multi_gpu_test.cpp
+            ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
+        )
+        target_include_directories(test_omp_multi_gpu PRIVATE ${CMAKE_SOURCE_DIR}/src)
+        target_link_libraries(test_omp_multi_gpu PRIVATE "lib${PROJECT_NAME}")
+
+        # Link OpenMP
+        target_link_libraries(test_omp_multi_gpu PRIVATE OpenMP::OpenMP_CXX)
+
+        # Add OpenMP Multi-GPU tests
+        add_test(NAME OpenMP_Multi_GPU_Tests COMMAND test_omp_multi_gpu)
+        set_tests_properties(OpenMP_Multi_GPU_Tests PROPERTIES
+            WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+        )
+
+        # Add to common list
+        list(APPEND COMMON_TEST_EXECUTABLES test_omp_multi_gpu)
+        message(STATUS "Added OpenMP multi-GPU test executable: test_omp_multi_gpu")
+
+    else()
+        message(STATUS "OpenMP not found - skipping OpenMP multi-GPU tests")
+    endif()
+endif()
+
+# Add Simple Multi-GPU test (no OpenMP, just DeviceBuffer on multiple devices)
+add_executable(test_simple_multi_gpu
+    simple_multi_gpu_test.cpp
+    ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
+)
+target_include_directories(test_simple_multi_gpu PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(test_simple_multi_gpu PRIVATE "lib${PROJECT_NAME}" Threads::Threads)
+
+# Add Simple Multi-GPU tests
+add_test(NAME Simple_Multi_GPU_Tests COMMAND test_simple_multi_gpu)
+set_tests_properties(Simple_Multi_GPU_Tests PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+)
+
+# Add to common list
+list(APPEND COMMON_TEST_EXECUTABLES test_simple_multi_gpu)
+message(STATUS "Added Simple multi-GPU test executable: test_simple_multi_gpu")
 
 # Install all test executables at once
 install(TARGETS ${COMMON_TEST_EXECUTABLES})

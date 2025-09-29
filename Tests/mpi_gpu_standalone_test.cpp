@@ -50,10 +50,11 @@ public:
     int device_to_use = (device_id >= 0) ? device_id : 0;
     resource_ = Resource(ResourceType::SYCL, device_to_use);
 
-    // Domain decomposition
-    int interior_points = ny - 2;
-    int chunk_size_low = interior_points / size_;
-    int remainder = interior_points % size_;
+    // Domain decomposition - split interior points (ny-2) among processes
+    int total_interior_points =
+        ny - 2; // Total interior rows (excluding boundaries)
+    int chunk_size_low = total_interior_points / size_;
+    int remainder = total_interior_points % size_;
 
     if (rank_ < remainder) {
       chunk_size_ = chunk_size_low + 1;
@@ -61,7 +62,8 @@ public:
       chunk_size_ = chunk_size_low;
     }
 
-    iy_start_global_ = 1; // Start from 1 (after boundary)
+    // Calculate global starting row for this process
+    iy_start_global_ = 1; // Start from 1 (after top boundary)
     for (int i = 0; i < rank_; i++) {
       if (i < remainder) {
         iy_start_global_ += chunk_size_low + 1;
@@ -87,18 +89,23 @@ public:
   void initialize_boundaries() {
     std::vector<float> host_data(nx_ * (chunk_size_ + 2), 0.0f);
 
-    // Set boundary conditions only if this rank owns the actual boundaries
-    if (rank_ == 0) {
-      // Top boundary (y=0)
+    // Set boundary conditions based on global position
+    // Top boundary (y=0) - only if this rank owns the top row
+    if (iy_start_global_ == 1) {
+      // This rank owns the top interior row, so set top ghost to boundary value
       for (int ix = 0; ix < nx_; ix++) {
-        host_data[ix] = 1.0f;
+        host_data[ix] = 1.0f; // Top ghost cell = boundary value
       }
     }
-    if (rank_ == size_ - 1) {
-      // Bottom boundary (y=ny-1)
+
+    // Bottom boundary (y=ny-1) - only if this rank owns the bottom row
+    if (iy_end_global_ == ny_ - 2) {
+      // This rank owns the bottom interior row, so set bottom ghost to boundary
+      // value
       int local_height = chunk_size_ + 2;
       for (int ix = 0; ix < nx_; ix++) {
-        host_data[ix + (local_height - 1) * nx_] = 1.0f;
+        host_data[ix + (local_height - 1) * nx_] =
+            1.0f; // Bottom ghost cell = boundary value
       }
     }
 
@@ -283,8 +290,8 @@ int main(int argc, char *argv[]) {
 
     // Test 1: Small Grid Test
     {
-      const int nx = 8;
-      const int ny = 8;
+      const int nx = 20;
+      const int ny = 20;
       const int iter_max = 100;
 
       if (rank == 0) {
@@ -340,6 +347,73 @@ int main(int argc, char *argv[]) {
         std::cout << "  Result: " << (global_result ? "PASSED" : "FAILED")
                   << std::endl;
         all_tests_passed &= (global_result == 1);
+      }
+    }
+
+    // Performance Benchmark: Large Scale Problems
+    std::vector<std::pair<size_t, size_t>> test_sizes = {
+        {20000, 20000}, // 400M points
+        {30000, 30000}, // 900M points
+        {40000, 40000}  // 1.6B points
+    };
+
+    for (auto [nx, ny] : test_sizes) {
+      const int iter_max = 50; // Reduced iterations for very large problems
+
+      if (rank == 0) {
+        std::cout << "\n=== PERFORMANCE BENCHMARK ===\n";
+        std::cout << "Large Scale Test: " << nx << "x" << ny << " grid ("
+                  << (nx * ny) << " points)" << std::endl;
+        std::cout << "Processes: " << size << " GPU(s)" << std::endl;
+      }
+
+      MPIJacobiSolver solver(nx, ny);
+
+      if (rank == 0) {
+        std::cout << "Points per process: " << (nx * ny / size) << std::endl;
+        std::cout << "Domain decomposition: chunk_size="
+                  << solver.get_chunk_size() << std::endl;
+      }
+
+      solver.initialize_boundaries();
+
+      // Warm-up run (5 iterations)
+      solver.solve(5, 999); // No output during warmup
+
+      // Barrier to synchronize all processes before timing
+      MPI_Barrier(MPI_COMM_WORLD);
+
+      // Measure performance
+      double start_time = MPI_Wtime();
+      float final_norm =
+          solver.solve(iter_max, 25); // Print every 25 iterations
+      MPI_Barrier(MPI_COMM_WORLD);    // Ensure all processes finish
+      double end_time = MPI_Wtime();
+      double elapsed = end_time - start_time;
+
+      if (rank == 0) {
+        std::cout << "\n=== BENCHMARK RESULTS ===\n";
+        std::cout << "Grid: " << nx << "x" << ny << " (" << (nx * ny)
+                  << " points)" << std::endl;
+        std::cout << "Processes: " << size << " GPU(s)" << std::endl;
+        std::cout << "Elapsed time: " << elapsed << " seconds" << std::endl;
+        std::cout << "Final L2 norm: " << final_norm << std::endl;
+
+        // Calculate performance metrics
+        double total_operations = (double)nx * ny * iter_max;
+        double ops_per_sec = total_operations / elapsed;
+        double gflops_estimate =
+            (ops_per_sec * 5.0) / 1e9; // ~5 FLOPS per point per iteration
+
+        std::cout << "Performance: " << (ops_per_sec / 1e6) << " Mops/sec"
+                  << std::endl;
+        std::cout << "Estimated: " << gflops_estimate << " GFLOPS" << std::endl;
+
+        if (size > 1) {
+          std::cout << "Theoretical max speedup: " << size
+                    << "x (perfect scaling)" << std::endl;
+        }
+        std::cout << "========================\n" << std::endl;
       }
     }
 

@@ -40,11 +40,6 @@ Event launch_sycl_kernel_1d(const Resource &resource,
       ((config.problem_size.x + local_range_sycl - 1) / local_range_sycl) *
       local_range_sycl;
 
-  std::cout << "DEBUG: 1D SYCL kernel - problem_size.x="
-            << config.problem_size.x << ", local_range=" << local_range_sycl
-            << ", global_range=" << global_range_sycl << std::endl;
-  // Ensure global range is divisible by local range to avoid non-uniform
-  // work-groups
   sycl::range<1> local_range(static_cast<size_t>(local_range_sycl));
   sycl::range<1> global_range(static_cast<size_t>(global_range_sycl));
   sycl::nd_range<1> execution_range(global_range, local_range);
@@ -70,9 +65,6 @@ Event launch_sycl_kernel_1d(const Resource &resource,
     });
   });
 
-  std::cout << "DEBUG: SYCL kernel submitted successfully" << std::endl;
-
-  // Sync if requested
   if (config.sync) {
     sycl_event.wait();
   }
