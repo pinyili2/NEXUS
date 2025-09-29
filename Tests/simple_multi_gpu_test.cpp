@@ -432,7 +432,7 @@ TEST_CASE("Simple Multi-GPU Jacobi Solver", "[simple][multi-gpu]") {
     std::vector<std::pair<int, int>> problem_sizes = {
         {256, 256}, {512, 512}, {1024, 1024}};
 
-    std::vector<int> gpu_configs = {4, 3, 0};
+    std::vector<int> gpu_configs = {1, 2, 4};
     const int iter_max = 200; // Reduced for profiling
 
     std::cout << "\n=== SCALING PROFILE ===" << std::endl;
