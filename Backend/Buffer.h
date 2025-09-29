@@ -314,10 +314,12 @@ public:
       }
     }
 
-    // The new allocation was successful, so it's now safe to deallocate the old
-    // buffer.
     if (device_ptr_) {
-      Policy::deallocate(device_ptr_);
+      void *dealloc_queue = stream_;
+      if (!dealloc_queue && resource_.type() == ResourceType::SYCL) {
+        dealloc_queue = resource_.get_queue(stream_type_);
+      }
+      Policy::deallocate(device_ptr_, dealloc_queue, sync_);
     }
 
     // Finally, update the buffer's state to point to the new memory.
@@ -729,7 +731,11 @@ private:
 
   void deallocate() {
     if (device_ptr_) {
-      Policy::deallocate(device_ptr_, stream_, sync_);
+      void *dealloc_queue = stream_;
+      if (!dealloc_queue && resource_.type() == ResourceType::SYCL) {
+        dealloc_queue = resource_.get_queue(stream_type_);
+      }
+      Policy::deallocate(device_ptr_, dealloc_queue, sync_);
       device_ptr_ = nullptr;
 #ifdef HOST_GUARD
       LOGTRACE("Deallocated buffer on {}", resource_.toString());
@@ -927,6 +933,7 @@ private:
   void *texture_obj_ptr_{nullptr};
   Resource resource_{};
   size_t width_{0}, height_{0}, depth_{0};
+  StreamType stream_type_{StreamType::Memory};
 
 public:
   TextureBuffer() = default;

@@ -6,6 +6,14 @@ set(LIB_SOURCES
     #Math/BaseGrid.cpp
 )
 
+# Conditionally add MPI specific source files to the library
+if(USE_MPI)
+    list(APPEND LIB_SOURCES
+        MPIManager.cpp
+    )
+    message(STATUS "src: Adding MPI specific sources to lib${PROJECT_NAME}")
+endif()
+
 # Conditionally add SYCL specific source files to the library
 # We check if either SYCL ACPP or ICPX option is enabled from the top-level CMake.
 if(USE_SYCL_ACPP OR USE_SYCL_ICPX)

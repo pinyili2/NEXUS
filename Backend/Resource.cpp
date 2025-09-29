@@ -18,7 +18,6 @@ void *Resource::get_stream_impl(StreamType stream_type) const {
   ensure_context();
   ensure_queues_initialized();
 
-  // Map StreamType to dedicated stream ID
   short stream_id = static_cast<short>(stream_type);
 
 #ifdef USE_CUDA

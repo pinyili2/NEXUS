@@ -23,7 +23,8 @@ struct Policy {
     // Get queue from Resource (Resource owns queues now)
     void *ptr = nullptr;
     auto *q = queue ? static_cast<sycl::queue *>(queue)
-                    : static_cast<sycl::queue *>(resource.get_stream());
+                    : static_cast<sycl::queue *>(
+                          resource.get_stream(StreamType::Memory));
 
     if (!q) {
       ARBD_Exception(ExceptionType::RuntimeError,
@@ -42,7 +43,6 @@ struct Policy {
 
   static void deallocate(void *ptr, void *queue = nullptr, bool sync = true) {
     if (ptr) {
-      // Need a queue for deallocation - use provided or get from context
       if (!queue) {
         ARBD_Exception(ExceptionType::RuntimeError,
                        "SYCL deallocation requires a queue");
@@ -108,7 +108,8 @@ struct PinnedPolicy {
     }
 
     auto *q = queue ? static_cast<sycl::queue *>(queue)
-                    : static_cast<sycl::queue *>(resource.get_stream());
+                    : static_cast<sycl::queue *>(
+                          resource.get_stream(StreamType::Memory));
 
     if (!q) {
       ARBD_Exception(ExceptionType::RuntimeError,
@@ -133,7 +134,8 @@ struct PinnedPolicy {
                                size_t bytes, const Resource &resource,
                                void *queue = nullptr) {
     auto *q = queue ? static_cast<sycl::queue *>(queue)
-                    : static_cast<sycl::queue *>(resource.get_stream());
+                    : static_cast<sycl::queue *>(
+                          resource.get_stream(StreamType::Memory));
 
     if (!q) {
       ARBD_Exception(ExceptionType::RuntimeError,
@@ -147,7 +149,8 @@ struct PinnedPolicy {
                                    size_t bytes, const Resource &resource,
                                    void *queue = nullptr) {
     auto *q = queue ? static_cast<sycl::queue *>(queue)
-                    : static_cast<sycl::queue *>(resource.get_stream());
+                    : static_cast<sycl::queue *>(
+                          resource.get_stream(StreamType::Memory));
 
     if (!q) {
       ARBD_Exception(ExceptionType::RuntimeError,
@@ -184,7 +187,8 @@ struct UnifiedPolicy {
     }
 
     auto *q = queue ? static_cast<sycl::queue *>(queue)
-                    : static_cast<sycl::queue *>(resource.get_stream());
+                    : static_cast<sycl::queue *>(
+                          resource.get_stream(StreamType::Memory));
 
     if (!q) {
       ARBD_Exception(ExceptionType::RuntimeError,
@@ -231,17 +235,9 @@ struct UnifiedPolicy {
 
   static void copy_device_to_device(void *dst, const void *src, size_t bytes,
                                     void *queue = nullptr, bool sync = false) {
-    if (!queue) {
-      ARBD_Exception(ExceptionType::RuntimeError,
-                     "SYCL copy_device_to_device requires a queue");
-    }
-    auto &q = *static_cast<sycl::queue *>(queue);
-
-    if (sync) {
-      q.memcpy(dst, src, bytes).wait();
-    } else {
-      q.memcpy(dst, src, bytes);
-    }
+    // For SYCL unified memory, use regular memcpy since both src and dst are
+    // accessible from host
+    std::memcpy(dst, src, bytes);
   }
 };
 
@@ -294,7 +290,8 @@ struct TexturePolicy {
   }
 
   static void copy_from_buffer(void *texture_ptr, const void *buffer_ptr,
-                               size_t bytes, const Resource &resource) {
+                               size_t bytes, const Resource &resource,
+                               StreamType stream_type) {
     if (!texture_ptr || !buffer_ptr)
       return;
 
@@ -310,7 +307,7 @@ struct TexturePolicy {
       return;
     }
 
-    auto *q = static_cast<sycl::queue *>(resource.get_stream());
+    auto *q = static_cast<sycl::queue *>(resource.get_stream(stream_type));
     if (!q) {
       ARBD_Exception(ExceptionType::RuntimeError,
                      "Failed to get queue for texture upload");
