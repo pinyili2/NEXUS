@@ -37,7 +37,6 @@ public:
     try {
 #ifdef USE_CUDA
       CUDA::Manager::init();
-      CUDA::Manager::load_info();
       if (CUDA::Manager::device_count() > 0) {
         for (size_t i = 0; i < CUDA::Manager::device_count(); ++i) {
           available_resources.emplace_back(ResourceType::CUDA, i);

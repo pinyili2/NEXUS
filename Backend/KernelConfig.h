@@ -136,9 +136,7 @@ public:
 #ifdef USE_CUDA
     if (resource.type() == ResourceType::CUDA) {
       try {
-        auto &device = CUDA::Manager::get_device_by_id(resource.id());
-        cudaDeviceProp prop;
-        CUDA_CHECK(cudaGetDeviceProperties(&prop, device.id()));
+        cudaDeviceProp prop = CUDA::Manager::get_device_properties(resource.id());
 
         // Clamp each dimension to CUDA limits
         block_size.x =
@@ -161,10 +159,10 @@ public:
               std::max(1UL, static_cast<idx_t>(block_size.z * scale_factor));
         }
 
-        LOGDEBUG("CUDA block size clamped to ({}, {}, {}) for device with max "
+        LOGDEBUG("CUDA block size clamped to (%lu, %lu, %lu) for device with max "
                  "threads per "
-                 "block {}",
-                 block_size.x, block_size.y, block_size.z,
+                 "block %d",
+                 (unsigned long)block_size.x, (unsigned long)block_size.y, (unsigned long)block_size.z,
                  prop.maxThreadsPerBlock);
 
       } catch (...) {

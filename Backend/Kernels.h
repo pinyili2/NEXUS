@@ -265,7 +265,7 @@ public:
 
   EventList execute() {
 #ifdef USE_CUDA
-    if (resource_.type == ResourceType::CUDA && !nodes_.empty()) {
+    if (resource_.type() == ResourceType::CUDA && !nodes_.empty()) {
       if (!is_recorded_) {
         record_cuda_graph();
       }

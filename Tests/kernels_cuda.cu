@@ -3,7 +3,13 @@
 #include "Backend/KernelConfig.h"
 #include "Backend/Profiler.h"
 #include "Backend/Resource.h"
+#include "Header.h"
 #include "catch_boiler.h"
+
+// Force template instantiation of CUDA kernels by including the implementation
+#ifdef USE_CUDA
+#include "Backend/CUDA/KernelHelper.cuh"
+#endif
 #include <chrono>
 #include <cmath>
 #include <vector>
@@ -64,12 +70,12 @@ static void initialize_backend_once() {
   }
 }
 struct kernel_func {
-  void operator()(size_t i, const float *input, float *output) const {
+  DEVICE void operator()(size_t i, const float *input, float *output) const {
     output[i] = input[i] * 3;
   }
 };
 struct initialize_boundaries_kernel {
-  void operator()(size_t i, float *__restrict__ const a_new,
+  DEVICE void operator()(size_t i, float *__restrict__ const a_new,
                   float *__restrict__ const a, const float pi, const int offset,
                   const int nx, const int my_ny, const int ny) const {
     // Convert linear thread index to actual row index
@@ -96,7 +102,7 @@ struct initialize_boundaries_kernel {
   }
 };
 struct jacobi_kernel {
-  void operator()(size_t i, float *__restrict__ const a_new,
+  DEVICE void operator()(size_t i, float *__restrict__ const a_new,
                   const float *__restrict__ const a,
                   float *__restrict__ const l2_norm, const int iy_start,
                   const int iy_end, const int nx,
@@ -138,7 +144,7 @@ struct jacobi_kernel {
 };
 
 struct optimized_jacobi_kernel {
-  void operator()(size_t i, float *__restrict__ const a_new,
+  DEVICE void operator()(size_t i, float *__restrict__ const a_new,
                   const float *__restrict__ const a,
                   float *__restrict__ const l2_norm, const int iy_start,
                   const int iy_end, const int nx,
@@ -419,7 +425,7 @@ TEST_CASE("Kernel Launch Interface", "[backend][kernels]") {
         INFO("=== TEST 1: Native CUDA kernel with DeviceBuffer ===");
 
         // Create Resource first to ensure consistent device usage
-        Resource cuda_resource(ResourceType::CUDA, 0);
+        Resource cuda_resource = Resource::create_cuda_device(0);
 
         // Create DeviceBuffers on the same device as the resource
         DeviceBuffer<float> input_buf(10, 0);  // Use device 0
@@ -472,7 +478,7 @@ TEST_CASE("Kernel Launch Interface", "[backend][kernels]") {
       try {
         INFO("=== TEST 2: CUDA launch_kernel with DeviceBuffer ===");
 
-        Resource cuda_resource(ResourceType::CUDA, 0); // Use device 0
+        Resource cuda_resource = Resource::create_cuda_device(0); // Use device 0
         DeviceBuffer<float> input_buf(10, 0);          // Use device 0
         DeviceBuffer<float> output_buf(10, 0);         // Use device 0
 
@@ -548,7 +554,7 @@ TEST_CASE("Jacobi Kernel", "[backend][kernels]") {
         a_buf.copy_from_host(zeros);
         a_new_buf.copy_from_host(zeros);
 
-        Resource resource(0);
+        Resource resource = Resource::create_cuda_device(0);
         INFO("Using backend: " << resource.getTypeString() << " device "
                                << resource.id());
 
@@ -651,7 +657,7 @@ TEST_CASE("Jacobi Kernel", "[backend][kernels]") {
         std::vector<float> norm_init(1, 0.0f);
         l2_norm_buf.copy_from_host(norm_init);
 
-        Resource resource(0);
+        Resource resource = Resource::create_cuda_device(0);
         INFO("Using backend: " << resource.getTypeString() << " device "
                                << resource.id());
 
@@ -749,7 +755,7 @@ TEST_CASE("Jacobi with Norm Calculation", "[backend][kernels]") {
       std::vector<float> norm_init(1, 0.0f);
       l2_norm_buf.copy_from_host(norm_init);
 
-      Resource resource(0);
+      Resource resource = Resource::create_cuda_device(0);
       INFO("Using backend: " << resource.getTypeString() << " device "
                              << resource.id());
 
@@ -859,7 +865,7 @@ TEST_CASE("Atomic Performance Comparison", "[backend][kernels][performance]") {
       l2_norm_basic_buf.copy_from_host(norm_init);
       l2_norm_optimized_buf.copy_from_host(norm_init);
 
-      Resource resource(0);
+      Resource resource = Resource::create_cuda_device(0);
       INFO("Using backend: " << resource.getTypeString() << " device "
                              << resource.id());
 
@@ -948,7 +954,7 @@ TEST_CASE("ATOMIC_ADD Type Safety", "[backend][kernels][atomic]") {
     try {
       INFO("=== TEST 6: ATOMIC_ADD Type Safety and Correctness ===");
 
-      Resource resource(0);
+      Resource resource = Resource::create_cuda_device(0);
       INFO("Testing ATOMIC_ADD on backend: " << resource.getTypeString());
 
       SECTION("Integer atomic operations") {
@@ -958,7 +964,7 @@ TEST_CASE("ATOMIC_ADD Type Safety", "[backend][kernels][atomic]") {
         int_buffer.copy_from_host(int_init);
 
         // Simple kernel to test integer atomic add
-        auto int_atomic_kernel = [](size_t i, int *target) {
+        auto int_atomic_kernel = [] DEVICE (size_t i, int *target) {
           if (i == 0) {
             // Only first thread performs the operation
             ATOMIC_ADD(target, 5);
@@ -986,7 +992,7 @@ TEST_CASE("ATOMIC_ADD Type Safety", "[backend][kernels][atomic]") {
         float_buffer.copy_from_host(float_init);
 
         // Simple kernel to test float atomic add
-        auto float_atomic_kernel = [](size_t i, float *target) {
+        auto float_atomic_kernel = [] DEVICE (size_t i, float *target) {
           if (i == 0) {
             // Only first thread performs the operation
             ATOMIC_ADD(target, 2.5f);
@@ -1014,7 +1020,7 @@ TEST_CASE("ATOMIC_ADD Type Safety", "[backend][kernels][atomic]") {
         double_buffer.copy_from_host(double_init);
 
         // Simple kernel to test double atomic add
-        auto double_atomic_kernel = [](size_t i, double *target) {
+        auto double_atomic_kernel = [] DEVICE (size_t i, double *target) {
           if (i == 0) {
             // Only first thread performs the operation
             ATOMIC_ADD(target, 0.75);
@@ -1056,7 +1062,7 @@ TEST_CASE("ATOMIC_ADD Performance Profiling",
     try {
       INFO("=== TEST 7: ATOMIC_ADD Performance Profiling ===");
 
-      Resource resource(0);
+      Resource resource = Resource::create_cuda_device(0);
       INFO("Profiling ATOMIC_ADD on backend: " << resource.getTypeString());
 
       // Initialize profiler
@@ -1070,7 +1076,7 @@ TEST_CASE("ATOMIC_ADD Performance Profiling",
         std::vector<float> float_init = {0.0f};
         float_buffer.copy_from_host(float_init);
 
-        auto single_thread_kernel = [](size_t i, float *target) {
+        auto single_thread_kernel = [] DEVICE (size_t i, float *target) {
           if (i == 0) {
             // Single thread doing 1000 atomic operations
             for (int j = 0; j < 1000; ++j) {
@@ -1110,7 +1116,7 @@ TEST_CASE("ATOMIC_ADD Performance Profiling",
         std::vector<float> float_init = {0.0f};
         float_buffer.copy_from_host(float_init);
 
-        auto medium_contention_kernel = [](size_t i, float *target) {
+        auto medium_contention_kernel = [] DEVICE (size_t i, float *target) {
           // Each of 32 threads does 100 atomic operations
           for (int j = 0; j < 100; ++j) {
             ATOMIC_ADD(target, 1.0f);
@@ -1147,7 +1153,7 @@ TEST_CASE("ATOMIC_ADD Performance Profiling",
         std::vector<float> float_init = {0.0f};
         float_buffer.copy_from_host(float_init);
 
-        auto high_contention_kernel = [](size_t i, float *target) {
+        auto high_contention_kernel = [] DEVICE (size_t i, float *target) {
           // Each of 1024 threads does 10 atomic operations
           for (int j = 0; j < 10; ++j) {
             ATOMIC_ADD(target, 1.0f);
@@ -1189,7 +1195,7 @@ TEST_CASE("ATOMIC_ADD Performance Profiling",
         std::vector<int> int_init = {0};
         int_buffer.copy_from_host(int_init);
 
-        auto int_atomic_kernel = [=](size_t i, int *target) {
+        auto int_atomic_kernel = [=] DEVICE (size_t i, int *target) {
           for (int j = 0; j < ops_per_thread; ++j) {
             ATOMIC_ADD(target, 1);
           }
@@ -1212,7 +1218,7 @@ TEST_CASE("ATOMIC_ADD Performance Profiling",
         std::vector<float> float_init = {0.0f};
         float_buffer.copy_from_host(float_init);
 
-        auto float_atomic_kernel = [=](size_t i, float *target) {
+        auto float_atomic_kernel = [=] DEVICE (size_t i, float *target) {
           for (int j = 0; j < ops_per_thread; ++j) {
             ATOMIC_ADD(target, 1.0f);
           }
@@ -1277,3 +1283,4 @@ TEST_CASE("ATOMIC_ADD Performance Profiling",
     REQUIRE(true);
   }
 }
+

@@ -98,7 +98,7 @@ class Timer {
 		}
 
 		if (!name_.empty()) {
-			LOGINFO("{} ... ", name_);
+			LOGINFO("%s ... ", name_.c_str());
 		}
 	}
 
@@ -142,7 +142,7 @@ class Timer {
 	void stop() {
 		float ms = elapsed();
 		if (!name_.empty()) {
-			LOGINFO("{} completed in {:.3f} ms", name_, ms);
+			LOGINFO("%s completed in %.3f ms", name_.c_str(), ms);
 		}
 	}
 
@@ -151,7 +151,7 @@ class Timer {
 		name_ = msg;
 		start();
 		if (!name_.empty()) {
-			LOGINFO("{} ... ", name_);
+			LOGINFO("%s ... ", name_.c_str());
 		}
 	}
 };
@@ -257,7 +257,7 @@ class CUDAProfiler {
 		cudaMemGetInfo(&free_bytes, &total_bytes);
 		size_t used_bytes = total_bytes - free_bytes;
 
-		LOGINFO("CUDA Memory: {} MB used / {} MB total",
+		LOGINFO("CUDA Memory: %zu MB used / %zu MB total",
 				used_bytes / (1024 * 1024),
 				total_bytes / (1024 * 1024));
 	}
@@ -793,7 +793,7 @@ class ProfileManager {
 #endif
 			break;
 		default:
-			LOGINFO("Profile Mark [CPU]: {}", message);
+			LOGINFO("Profile Mark [CPU]: %s", message.c_str());
 			break;
 		}
 	}
@@ -862,7 +862,7 @@ class ProfileManager {
 		}
 
 		LOGINFO("=== Profiling Summary ===");
-		LOGINFO("Total events: {}", events_.size());
+		LOGINFO("Total events: %zu", events_.size());
 
 		// Group by backend
 		std::unordered_map<ResourceType, std::vector<double>> backend_times;
@@ -896,8 +896,8 @@ class ProfileManager {
 				break;
 			}
 
-			LOGINFO("{}: {} events, {:.3f} ms total, {:.3f} ms avg, {:.3f}/{:.3f} ms min/max",
-					backend_name,
+			LOGINFO("%s: %zu events, %.3f ms total, %.3f ms avg, %.3f/%.3f ms min/max",
+					backend_name.c_str(),
 					times.size(),
 					total_time,
 					total_time / times.size(),
@@ -909,7 +909,7 @@ class ProfileManager {
   private:
 	static void save_profile_data() {
 		// Save profiling data to JSON file (simplified implementation)
-		LOGINFO("Saving profile data to {}", config_.output_file);
+		LOGINFO("Saving profile data to %s", config_.output_file.c_str());
 		// Implementation would write JSON format profile data
 	}
 

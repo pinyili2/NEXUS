@@ -7,6 +7,7 @@
 #include <atomic>
 #include <cuda_runtime.h>
 #include <memory>
+#include "CUDAManager.h"
 
 namespace ARBD::CUDA {
 

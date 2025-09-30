@@ -4,13 +4,13 @@
 #include "../Events.h"
 #include "../KernelConfig.h"
 #include "../Resource.h"
+#include "../ARBDException.h"
 
 #ifdef __CUDACC__
 // Only include CUDA headers when compiling with nvcc
 #include "CUDAManager.h"
 #include <cuda_runtime.h>
 #include <thrust/tuple.h>
-using namespace cuda::std;
 #endif
 
 namespace ARBD {
@@ -61,7 +61,7 @@ Event launch_cuda_kernel(const Resource& resource,
 	// Set device context
 	int old_device;
 	CUDA_CHECK(cudaGetDevice(&old_device));
-	CUDA_CHECK(cudaSetDevice(static_cast<int>(resource.id)));
+	CUDA_CHECK(cudaSetDevice(static_cast<int>(resource.id())));
 
 	// Launch kernel using generic wrapper
 	dim3 grid(local_config.grid_size.x, local_config.grid_size.y, local_config.grid_size.z);
@@ -85,8 +85,20 @@ Event launch_cuda_kernel(const Resource& resource,
 	CUDA_CHECK(cudaSetDevice(old_device));
 
 	return Event(completion_event, resource);
-#else
-throw_not_implemented("launch_cuda_kernel can only be used in CUDA compilation units");
 }
-#endif
+
+#else // __CUDACC__
+
+// Non-CUDA compilation - provide stub implementation
+template<typename Functor, typename... Args>
+Event launch_cuda_kernel(const Resource& resource,
+						 const KernelConfig& config,
+						 Functor kernel_func,
+						 Args... args) {
+	// Non-CUDA compilation unit - provide stub implementation
+	throw ARBD::Exception(ARBD::ExceptionType::NotImplementedError, ARBD::SourceLocation(), "launch_cuda_kernel can only be used in CUDA compilation units");
 }
+
+#endif // __CUDACC__
+
+} // namespace ARBD

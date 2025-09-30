@@ -83,6 +83,18 @@ private:
   // Device validation state
   mutable bool device_verified_{false};
   mutable bool device_available_{false};
+  // OpenMP+Rank extension
+  static thread_local int worker_id_;    // OpenMP thread ID (NOT GPU thread!)
+  static thread_local int assigned_gpu_; // GPU assigned to this OpenMP worker
+  static thread_local Resource *worker_resource_; // This worker's resource
+
+  // Global rank configuration
+  static bool rank_initialized_;
+  static int rank_id_;                // Process rank (0 if no MPI)
+  static int ranks_per_node_;         // Number of ranks on this node
+  static std::vector<int> rank_gpus_; // GPUs assigned to this rank
+  static std::vector<Resource *> worker_resources_;
+  // Resource per OpenMP worker
 
 public:
   /**

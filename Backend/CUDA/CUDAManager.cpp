@@ -1,6 +1,7 @@
 // src/Backend/CUDA/CUDAManager.cpp
 #ifdef USE_CUDA
 #include "CUDAManager.h"
+#include "ARBDLogger.h"
 
 namespace ARBD {
 namespace CUDA {
@@ -9,6 +10,13 @@ namespace CUDA {
 std::vector<cudaDeviceProp> Manager::device_properties_;
 std::vector<std::vector<bool>> Manager::peer_access_matrix_;
 bool Manager::initialized_ = false;
+std::vector<int> Manager::rank_devices_;
+bool Manager::multi_rank_mode_ = false;
+int Manager::rank_id_ = -1;
+int Manager::omp_threads_ = 1;
+std::vector<int> Manager::thread_gpu_map_;
+std::string Manager::gpu_affinity_strategy_ = "block";
+std::mutex Manager::mtx_;
 
 void Manager::init() {
   if (initialized_) {
@@ -130,6 +138,237 @@ cudaDeviceProp Manager::get_device_properties(int device_id) {
   }
 
   return device_properties_[device_id];
+}
+void Manager::init_for_rank(int local_rank, int ranks_per_node,
+                            int threads_per_rank, bool verbose) {
+  std::lock_guard<std::mutex> lock(mtx_);
+
+  // First, do standard initialization if not already done
+  if (device_properties_.empty()) {
+    init();
+  }
+
+  // Store rank information
+  rank_id_ = local_rank;
+  multi_rank_mode_ = (ranks_per_node > 1);
+
+  // Determine number of OpenMP threads
+  if (threads_per_rank <= 0) {
+// Use OMP_NUM_THREADS if set, otherwise use max available
+#pragma omp parallel
+    {
+#pragma omp single
+      omp_threads_ = omp_get_num_threads();
+    }
+  } else {
+    omp_threads_ = threads_per_rank;
+    omp_set_num_threads(omp_threads_);
+  }
+
+  // Get total number of GPUs
+  int num_gpus = static_cast<int>(device_properties_.size());
+  if (num_gpus == 0) {
+    ARBD_Exception(ExceptionType::ValueError,
+                   "No CUDA devices available for rank {}", local_rank);
+  }
+
+  // Determine GPU assignment for this rank
+  rank_devices_.clear();
+
+  if (ranks_per_node <= 0) {
+    ranks_per_node = 1; // Default to single rank
+  }
+
+  if (ranks_per_node == 1) {
+    // Single rank gets all GPUs
+    for (int i = 0; i < num_gpus; ++i) {
+      rank_devices_.push_back(i);
+    }
+    LOGINFO("Single rank mode: assigned all {} GPU(s)", num_gpus);
+
+  } else if (ranks_per_node <= num_gpus) {
+    // One or more GPUs per rank
+    int gpus_per_rank = num_gpus / ranks_per_node;
+    int remainder = num_gpus % ranks_per_node;
+
+    int start_gpu = local_rank * gpus_per_rank;
+    if (local_rank < remainder) {
+      start_gpu += local_rank;
+      gpus_per_rank += 1;
+    } else {
+      start_gpu += remainder;
+    }
+
+    for (int i = 0; i < gpus_per_rank; ++i) {
+      rank_devices_.push_back(start_gpu + i);
+    }
+
+    LOGINFO("Rank {} assigned to {} GPU(s): [{}]", local_rank,
+            rank_devices_.size(), [&]() {
+              std::stringstream ss;
+              for (size_t i = 0; i < rank_devices_.size(); ++i) {
+                if (i > 0)
+                  ss << ", ";
+                ss << rank_devices_[i];
+              }
+              return ss.str();
+            }());
+
+  } else {
+    // More ranks than GPUs: round-robin assignment
+    int gpu_id = local_rank % num_gpus;
+    rank_devices_.push_back(gpu_id);
+    LOGWARN("Rank {} sharing GPU {} (oversubscription: {} ranks, {} GPUs)",
+            local_rank, gpu_id, ranks_per_node, num_gpus);
+  }
+
+  // Setup OpenMP thread to GPU mapping
+  setup_omp_gpu_mapping();
+
+  if (verbose) {
+    LOGINFO("Rank {} configuration:", local_rank);
+    LOGINFO("  OpenMP threads: {}", omp_threads_);
+    LOGINFO("  Assigned GPUs: {}", rank_devices_.size());
+    for (int gpu_id : rank_devices_) {
+      const auto &dev = device_properties_[gpu_id];
+      LOGINFO("    GPU {}: {} (SM {}.{}, {:.1f}GB)", gpu_id,
+              dev.name, dev.major,
+              dev.minor,
+              dev.totalGlobalMem / (1024.0f * 1024.0f * 1024.0f));
+    }
+
+    // Show thread-GPU mapping
+    LOGINFO("  Thread-GPU mapping (strategy: {}):", gpu_affinity_strategy_);
+    for (int t = 0; t < std::min(omp_threads_, 8); ++t) {
+      LOGINFO("    Thread {} -> GPU {}", t, thread_gpu_map_[t]);
+    }
+    if (omp_threads_ > 8) {
+      LOGINFO("    ... ({} more threads)", omp_threads_ - 8);
+    }
+  }
+
+  // Initialize the assigned devices for this rank
+  for (int gpu_id : rank_devices_) {
+    CUDA_CHECK(cudaSetDevice(gpu_id));
+    CUDA_CHECK(cudaDeviceSynchronize());
+  }
+
+  // Set the current device to the first assigned GPU
+  CUDA_CHECK(cudaSetDevice(rank_devices_[0]));
+
+  // Enable peer access between assigned GPUs if multiple
+  if (rank_devices_.size() > 1) {
+    for (size_t i = 0; i < rank_devices_.size(); ++i) {
+      for (size_t j = i + 1; j < rank_devices_.size(); ++j) {
+        int can_access = 0;
+        CUDA_CHECK(cudaDeviceCanAccessPeer(&can_access, rank_devices_[i],
+                                           rank_devices_[j]));
+        if (can_access) {
+          CUDA_CHECK(cudaSetDevice(rank_devices_[i]));
+          cudaError_t err = cudaDeviceEnablePeerAccess(rank_devices_[j], 0);
+          if (err == cudaSuccess || err == cudaErrorPeerAccessAlreadyEnabled) {
+            LOGDEBUG("Peer access enabled: GPU {} <-> GPU {}", rank_devices_[i],
+                     rank_devices_[j]);
+          }
+
+          CUDA_CHECK(cudaSetDevice(rank_devices_[j]));
+          err = cudaDeviceEnablePeerAccess(rank_devices_[i], 0);
+        }
+      }
+    }
+    CUDA_CHECK(cudaSetDevice(rank_devices_[0]));
+  }
+
+  // Configure for OpenMP usage
+  if (omp_threads_ > 1) {
+// Set thread affinity for NUMA awareness
+#pragma omp parallel
+    {
+      int thread_id = omp_get_thread_num();
+      int assigned_gpu = thread_gpu_map_[thread_id];
+
+      // Each thread sets its default GPU
+      cudaSetDevice(assigned_gpu);
+    }
+
+    LOGINFO("OpenMP configuration complete: {} threads across {} GPU(s)",
+            omp_threads_, rank_devices_.size());
+  }
+
+  LOGINFO("CUDA Manager initialized for rank {} with {} GPU(s) and {} OpenMP "
+          "thread(s)",
+          local_rank, rank_devices_.size(), omp_threads_);
+}
+void Manager::setup_omp_gpu_mapping() {
+  thread_gpu_map_.resize(omp_threads_);
+
+  int num_rank_gpus = static_cast<int>(rank_devices_.size());
+
+  if (gpu_affinity_strategy_ == "block") {
+    // Block distribution: consecutive threads use same GPU
+    int threads_per_gpu = (omp_threads_ + num_rank_gpus - 1) / num_rank_gpus;
+
+    for (int t = 0; t < omp_threads_; ++t) {
+      int gpu_idx = t / threads_per_gpu;
+      if (gpu_idx >= num_rank_gpus)
+        gpu_idx = num_rank_gpus - 1;
+      thread_gpu_map_[t] = rank_devices_[gpu_idx];
+    }
+
+  } else if (gpu_affinity_strategy_ == "cyclic") {
+    // Cyclic distribution: round-robin threads across GPUs
+    for (int t = 0; t < omp_threads_; ++t) {
+      int gpu_idx = t % num_rank_gpus;
+      thread_gpu_map_[t] = rank_devices_[gpu_idx];
+    }
+
+  } else {
+    // Default to block
+    LOGWARN("Unknown GPU affinity strategy '{}', using 'block'",
+            gpu_affinity_strategy_);
+    gpu_affinity_strategy_ = "block";
+    setup_omp_gpu_mapping();
+    return;
+  }
+}
+void Manager::set_omp_gpu_affinity(const std::string &strategy) {
+  std::lock_guard<std::mutex> lock(mtx_);
+
+  if (strategy != "block" && strategy != "cyclic") {
+    LOGWARN("Invalid GPU affinity strategy '{}'. Use 'block' or 'cyclic'",
+            strategy);
+    return;
+  }
+
+  gpu_affinity_strategy_ = strategy;
+  setup_omp_gpu_mapping();
+
+  LOGINFO("GPU affinity strategy set to '{}'", strategy);
+}
+
+void Manager::init_for_omp_thread() {
+  int thread_id = omp_get_thread_num();
+
+  if (thread_id >= static_cast<int>(thread_gpu_map_.size())) {
+    LOGWARN("Thread {} has no GPU mapping. Using GPU 0", thread_id);
+    cudaSetDevice(0);
+    return;
+  }
+
+  int assigned_gpu = thread_gpu_map_[thread_id];
+  cudaSetDevice(assigned_gpu);
+
+  LOGTRACE("OpenMP thread {} using GPU {}", thread_id, assigned_gpu);
+}
+
+int Manager::get_thread_gpu() {
+  int thread_id = omp_get_thread_num();
+
+  if (thread_id >= static_cast<int>(thread_gpu_map_.size())) {
+    return 0; // Default to GPU 0
+  }
+
+  return thread_gpu_map_[thread_id];
 }
 
 void Manager::finalize() {

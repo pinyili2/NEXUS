@@ -290,7 +290,6 @@ public:
       ARBD::SignalManager::manage_segfault();
       // Initialize CUDA GPU Manager
       ARBD::CUDA::Manager::init();
-      ARBD::CUDA::Manager::load_info();
 #endif
 #ifdef USE_SYCL
       // Add error handling around SYCL initialization to prevent memory

@@ -45,12 +45,25 @@ list(APPEND COMMON_TEST_EXECUTABLES test_backend)
 message(STATUS "Added backend comprehensive test executable: test_backend")
 
 # Backend comprehensive tests - platform independent, tests all backend abstractions
-add_executable(test_kernel
-    kernels.cpp
-    ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
-)
+if(USE_CUDA)
+    add_executable(test_kernel
+        kernels_cuda.cu  # CUDA version of kernel tests
+        ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
+    )
+else()
+    add_executable(test_kernel
+        kernels.cpp
+        ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
+    )
+endif()
 target_include_directories(test_kernel PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(test_kernel PRIVATE "lib${PROJECT_NAME}")
+
+# Link OpenMP for CUDA Manager
+find_package(OpenMP)
+if(OpenMP_CXX_FOUND)
+    target_link_libraries(test_kernel PRIVATE OpenMP::OpenMP_CXX)
+endif()
 
 # Add backend test
 add_test(NAME Backend_Comprehensive_Tests COMMAND test_kernel)
@@ -229,13 +242,76 @@ if(USE_CUDA)
         target_link_libraries(test_cuda PRIVATE nccl)
     endif()
 
+    # Link OpenMP for CUDA Manager
+    find_package(OpenMP)
+    if(OpenMP_CXX_FOUND)
+        target_link_libraries(test_cuda PRIVATE OpenMP::OpenMP_CXX)
+    endif()
+
     # Add tests
     catch_discover_tests(test_cuda)
 
 
+    # CUDA OpenMP Multi-GPU test
+    add_executable(test_cuda_omp_multi_gpu
+        cuda_omp_multi_gpu_test.cpp
+        ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
+    )
+    target_include_directories(test_cuda_omp_multi_gpu PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    target_link_libraries(test_cuda_omp_multi_gpu PRIVATE
+        "lib${PROJECT_NAME}"
+        CUDA::cudart
+        CUDA::cuda_driver
+        curand)
+
+    if(USE_NCCL)
+        target_link_libraries(test_cuda_omp_multi_gpu PRIVATE nccl)
+    endif()
+
+    # Link OpenMP if available
+    find_package(OpenMP)
+    if(OpenMP_CXX_FOUND)
+        target_link_libraries(test_cuda_omp_multi_gpu PRIVATE OpenMP::OpenMP_CXX)
+    endif()
+
+    # CUDA Manager OpenMP test
+    add_executable(test_cuda_omp_manager
+        cuda_omp_manager_test.cpp
+        ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
+    )
+    target_include_directories(test_cuda_omp_manager PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    target_link_libraries(test_cuda_omp_manager PRIVATE
+        "lib${PROJECT_NAME}"
+        CUDA::cudart
+        CUDA::cuda_driver
+        curand)
+
+    if(USE_NCCL)
+        target_link_libraries(test_cuda_omp_manager PRIVATE nccl)
+    endif()
+
+    if(OpenMP_CXX_FOUND)
+        target_link_libraries(test_cuda_omp_manager PRIVATE OpenMP::OpenMP_CXX)
+    endif()
+
+    # Add CUDA tests
+    add_test(NAME CUDA_Tests COMMAND test_cuda)
+    add_test(NAME CUDA_OpenMP_Multi_GPU_Tests COMMAND test_cuda_omp_multi_gpu)
+    add_test(NAME CUDA_OpenMP_Manager_Tests COMMAND test_cuda_omp_manager)
+
+    set_tests_properties(CUDA_Tests PROPERTIES
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    )
+    set_tests_properties(CUDA_OpenMP_Multi_GPU_Tests PROPERTIES
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    )
+    set_tests_properties(CUDA_OpenMP_Manager_Tests PROPERTIES
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    )
+
     # Add to common list
-    list(APPEND COMMON_TEST_EXECUTABLES test_cuda)
-    message(STATUS "Added CUDA test executables: test_cuda")
+    list(APPEND COMMON_TEST_EXECUTABLES test_cuda test_cuda_omp_multi_gpu test_cuda_omp_manager)
+    message(STATUS "Added CUDA test executables: test_cuda, test_cuda_omp_multi_gpu, test_cuda_omp_manager")
 endif()
 
 # MPI Tests
