@@ -27,8 +27,7 @@ static void initialize_backend_once() {
 #endif
 
 #ifdef USE_CUDA
-    auto &cuda_manager = CUDA::Manager::instance();
-    cuda_manager.init();
+    CUDA::Manager::init();
     g_backend_available = true;
 #endif
 

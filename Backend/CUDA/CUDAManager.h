@@ -43,7 +43,7 @@ class Manager {
 public:
   // Device discovery and initialization
   static void init();
-  static void finalize();
+  static void finalize(bool reset_devices = true);
 
   // Device information
   static int device_count();
@@ -65,6 +65,8 @@ public:
    * Get GPU assigned to current OpenMP thread
    */
   static int get_thread_gpu();
+
+  static void load_info();
 
   /**
    * Set GPU-OpenMP thread affinity mapping

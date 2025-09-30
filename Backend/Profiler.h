@@ -909,7 +909,7 @@ class ProfileManager {
   private:
 	static void save_profile_data() {
 		// Save profiling data to JSON file (simplified implementation)
-		LOGINFO("Saving profile data to %s", config_.output_file.c_str());
+		LOGINFO("Saving profile data to {}", config_.output_file);
 		// Implementation would write JSON format profile data
 	}
 

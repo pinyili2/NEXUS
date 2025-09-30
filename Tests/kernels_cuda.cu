@@ -9,22 +9,13 @@
 // Force template instantiation of CUDA kernels by including the implementation
 #ifdef USE_CUDA
 #include "Backend/CUDA/KernelHelper.cuh"
+#include "Backend/CUDA/CUDAManager.h"
 #endif
 #include <chrono>
 #include <cmath>
 #include <vector>
 
-#ifdef USE_SYCL
-#include "Backend/SYCL/SYCLManager.h"
-#endif
 
-#ifdef USE_CUDA
-#include "Backend/CUDA/CUDAManager.h"
-#endif
-
-#ifdef USE_METAL
-#include "Backend/METAL/METALManager.h"
-#endif
 
 using namespace ARBD;
 

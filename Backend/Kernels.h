@@ -142,7 +142,7 @@ Event launch_cpu_kernel(const Resource &resource, const KernelConfig &config,
   idx_t chunk_size = (thread_count + num_threads - 1) / num_threads;
 
   for (unsigned int t = 0; t < num_threads; ++t) {
-    threads.emplace_back([=]() {
+    threads.emplace_back([=]() mutable {
       idx_t start = t * chunk_size;
       idx_t end = std::min(start + chunk_size, thread_count);
       for (idx_t i = start; i < end; ++i) {

@@ -252,66 +252,67 @@ if(USE_CUDA)
     catch_discover_tests(test_cuda)
 
 
-    # CUDA OpenMP Multi-GPU test
-    add_executable(test_cuda_omp_multi_gpu
-        cuda_omp_multi_gpu_test.cpp
-        ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
-    )
-    target_include_directories(test_cuda_omp_multi_gpu PRIVATE ${CMAKE_SOURCE_DIR}/src)
-    target_link_libraries(test_cuda_omp_multi_gpu PRIVATE
-        "lib${PROJECT_NAME}"
-        CUDA::cudart
-        CUDA::cuda_driver
-        curand)
+    # NOTE: CUDA OpenMP tests are now consolidated into test_unified_backend
+    # Keeping individual CUDA tests commented out to avoid duplication
 
-    if(USE_NCCL)
-        target_link_libraries(test_cuda_omp_multi_gpu PRIVATE nccl)
-    endif()
+    # # CUDA OpenMP Multi-GPU test
+    # add_executable(test_cuda_omp_multi_gpu
+    #     cuda_omp_multi_gpu_test.cpp
+    #     cuda_omp_multi_gpu_kernels.cu
+    #     ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
+    # )
+    # # Enable CUDA separable compilation for proper template instantiation
+    # set_property(TARGET test_cuda_omp_multi_gpu PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+    # target_include_directories(test_cuda_omp_multi_gpu PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    # target_link_libraries(test_cuda_omp_multi_gpu PRIVATE
+    #     "lib${PROJECT_NAME}"
+    #     CUDA::cudart
+    #     CUDA::cuda_driver
+    #     curand)
 
-    # Link OpenMP if available
-    find_package(OpenMP)
-    if(OpenMP_CXX_FOUND)
-        target_link_libraries(test_cuda_omp_multi_gpu PRIVATE OpenMP::OpenMP_CXX)
-    endif()
+    # if(USE_NCCL)
+    #     target_link_libraries(test_cuda_omp_multi_gpu PRIVATE nccl)
+    # endif()
 
-    # CUDA Manager OpenMP test
-    add_executable(test_cuda_omp_manager
-        cuda_omp_manager_test.cpp
-        ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
-    )
-    target_include_directories(test_cuda_omp_manager PRIVATE ${CMAKE_SOURCE_DIR}/src)
-    target_link_libraries(test_cuda_omp_manager PRIVATE
-        "lib${PROJECT_NAME}"
-        CUDA::cudart
-        CUDA::cuda_driver
-        curand)
+    # # Link OpenMP if available
+    # find_package(OpenMP)
+    # if(OpenMP_CXX_FOUND)
+    #     target_link_libraries(test_cuda_omp_multi_gpu PRIVATE OpenMP::OpenMP_CXX)
+    # endif()
 
-    if(USE_NCCL)
-        target_link_libraries(test_cuda_omp_manager PRIVATE nccl)
-    endif()
+    # # CUDA Manager OpenMP test
+    # add_executable(test_cuda_omp_manager
+    #     cuda_omp_manager_test.cpp
+    #     ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
+    # )
+    # target_include_directories(test_cuda_omp_manager PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    # target_link_libraries(test_cuda_omp_manager PRIVATE
+    #     "lib${PROJECT_NAME}"
+    #     CUDA::cudart
+    #     CUDA::cuda_driver
+    #     curand)
 
-    if(OpenMP_CXX_FOUND)
-        target_link_libraries(test_cuda_omp_manager PRIVATE OpenMP::OpenMP_CXX)
-    endif()
+    # if(USE_NCCL)
+    #     target_link_libraries(test_cuda_omp_manager PRIVATE nccl)
+    # endif()
 
-    # Add CUDA tests
+    # if(OpenMP_CXX_FOUND)
+    #     target_link_libraries(test_cuda_omp_manager PRIVATE OpenMP::OpenMP_CXX)
+    # endif()
+
+    # Add CUDA tests (keeping basic CUDA test, removing OMP-specific ones)
     add_test(NAME CUDA_Tests COMMAND test_cuda)
-    add_test(NAME CUDA_OpenMP_Multi_GPU_Tests COMMAND test_cuda_omp_multi_gpu)
-    add_test(NAME CUDA_OpenMP_Manager_Tests COMMAND test_cuda_omp_manager)
+    # add_test(NAME CUDA_OpenMP_Multi_GPU_Tests COMMAND test_cuda_omp_multi_gpu)
+    # add_test(NAME CUDA_OpenMP_Manager_Tests COMMAND test_cuda_omp_manager)
 
     set_tests_properties(CUDA_Tests PROPERTIES
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     )
-    set_tests_properties(CUDA_OpenMP_Multi_GPU_Tests PROPERTIES
-        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-    )
-    set_tests_properties(CUDA_OpenMP_Manager_Tests PROPERTIES
-        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-    )
+    # Note: CUDA OpenMP tests are now part of test_unified_backend
 
-    # Add to common list
-    list(APPEND COMMON_TEST_EXECUTABLES test_cuda test_cuda_omp_multi_gpu test_cuda_omp_manager)
-    message(STATUS "Added CUDA test executables: test_cuda, test_cuda_omp_multi_gpu, test_cuda_omp_manager")
+    # Add to common list (only basic CUDA test, OMP tests are in unified test)
+    list(APPEND COMMON_TEST_EXECUTABLES test_cuda)
+    message(STATUS "Added CUDA test executable: test_cuda (OpenMP tests moved to unified_backend_test)")
 endif()
 
 # MPI Tests
@@ -377,52 +378,6 @@ if(USE_MPI)
     list(APPEND COMMON_TEST_EXECUTABLES test_mpi)
     message(STATUS "Added MPI test executable: test_mpi with OpenMPI 5.0.7 support")
 
-    # Create MPI Multi-GPU test executable
-    add_executable(test_mpi_multi_gpu
-        mpi_multi_gpu_test.cpp
-        ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
-    )
-    target_include_directories(test_mpi_multi_gpu PRIVATE ${CMAKE_SOURCE_DIR}/src)
-    target_link_libraries(test_mpi_multi_gpu PRIVATE "lib${PROJECT_NAME}")
-
-    # Link MPI libraries for multi-GPU test
-    if(CMAKE_CXX_COMPILER MATCHES "mpi")
-        # When using MPI compiler wrapper, linking is automatic
-        message(STATUS "MPI multi-GPU test linking handled automatically by compiler wrapper")
-    else()
-        # Manual MPI linking when not using wrapper
-        target_link_libraries(test_mpi_multi_gpu
-            PRIVATE
-            MPI::MPI_CXX
-        )
-        target_include_directories(test_mpi_multi_gpu
-            PRIVATE
-            ${MPI_CXX_INCLUDE_DIRS}
-        )
-        message(STATUS "Manually linked MPI libraries to multi-GPU test executable")
-    endif()
-
-    # Ensure MPI multi-GPU test uses only CXX, not CUDA compiler
-    set_target_properties(test_mpi_multi_gpu PROPERTIES
-        LINKER_LANGUAGE CXX
-        CUDA_SEPARABLE_COMPILATION OFF
-        CUDA_RESOLVE_DEVICE_SYMBOLS OFF
-    )
-
-    # Explicitly set this as a CXX-only target to avoid CUDA flag inheritance
-    set_source_files_properties(mpi_multi_gpu_test.cpp PROPERTIES LANGUAGE CXX)
-
-    # Fix C++ standard library linking issues (same as main executable)
-    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-        target_link_libraries(test_mpi_multi_gpu PRIVATE -Wl,--whole-archive stdc++ -Wl,--no-whole-archive)
-        target_link_libraries(test_mpi_multi_gpu PRIVATE gcc_s gcc m pthread dl)
-        target_link_options(test_mpi_multi_gpu PRIVATE -Wl,--no-as-needed)
-    endif()
-
-    # Add MPI Multi-GPU tests
-    add_test(NAME MPI_Multi_GPU_Tests COMMAND test_mpi_multi_gpu)
-
-    # Create SYCL MPI test executable
     add_executable(test_sycl_mpi
         ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
     )
@@ -507,9 +462,9 @@ if(USE_MPI)
         ENVIRONMENT "OMPI_ALLOW_RUN_AS_ROOT=1;OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1"
     )
 
-    # Add to common list
-    list(APPEND COMMON_TEST_EXECUTABLES test_mpi_multi_gpu)
-    message(STATUS "Added MPI multi-GPU test executable: test_mpi_multi_gpu")
+    # Add to common list (MPI multi-GPU test moved to unified test)
+    # list(APPEND COMMON_TEST_EXECUTABLES test_mpi_multi_gpu)
+    # message(STATUS "Added MPI multi-GPU test executable: test_mpi_multi_gpu")
 endif()
 
 # ========================================================================
@@ -574,6 +529,86 @@ else()
         message(STATUS "OpenMP not found - skipping OpenMP multi-GPU tests")
     endif()
 endif()
+
+# ========================================================================
+# Unified Backend Test (replaces multiple separate test files)
+# ========================================================================
+
+add_executable(test_unified_backend
+    unified_backend_test.cpp
+    ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
+)
+target_include_directories(test_unified_backend PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(test_unified_backend PRIVATE "lib${PROJECT_NAME}" Threads::Threads)
+
+# Add CUDA-specific sources if CUDA is enabled
+if(USE_CUDA)
+    target_sources(test_unified_backend PRIVATE cuda_omp_multi_gpu_kernels.cu)
+    set_property(TARGET test_unified_backend PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+    target_link_libraries(test_unified_backend PRIVATE
+        CUDA::cudart
+        CUDA::cuda_driver
+        curand)
+    if(USE_NCCL)
+        target_link_libraries(test_unified_backend PRIVATE nccl)
+    endif()
+endif()
+
+# Link OpenMP if available
+find_package(OpenMP)
+if(OpenMP_CXX_FOUND)
+    target_link_libraries(test_unified_backend PRIVATE OpenMP::OpenMP_CXX)
+endif()
+
+# Link MPI if available
+if(USE_MPI)
+    if(CMAKE_CXX_COMPILER MATCHES "mpi")
+        message(STATUS "Unified backend test MPI linking handled automatically by compiler wrapper")
+    else()
+        target_link_libraries(test_unified_backend PRIVATE MPI::MPI_CXX)
+        target_include_directories(test_unified_backend PRIVATE ${MPI_CXX_INCLUDE_DIRS})
+    endif()
+
+    # Fix C++ standard library linking issues for MPI
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        target_link_libraries(test_unified_backend PRIVATE -Wl,--whole-archive stdc++ -Wl,--no-whole-archive)
+        target_link_libraries(test_unified_backend PRIVATE gcc_s gcc m pthread dl)
+        target_link_options(test_unified_backend PRIVATE -Wl,--no-as-needed)
+    endif()
+endif()
+
+# Add SYCL-specific linking if SYCL is enabled
+if(USE_SYCL_ACPP)
+    target_link_libraries(test_unified_backend PRIVATE stdc++)
+    target_link_directories(test_unified_backend PRIVATE "${BOOST_LIB_DIR}")
+endif()
+
+if(USE_SYCL_ICPX AND CMAKE_CXX_COMPILER MATCHES "icpx")
+    target_link_directories(test_unified_backend PUBLIC "${ICPX_LIB_DIR}")
+    if(SYCL_LIB)
+        target_link_libraries(test_unified_backend PRIVATE ${SYCL_LIB})
+    endif()
+    if(OPENCL_LIB)
+        target_link_libraries(test_unified_backend PRIVATE ${OPENCL_LIB})
+    endif()
+endif()
+
+# Add unified backend tests
+add_test(NAME Unified_Backend_Tests COMMAND test_unified_backend)
+set_tests_properties(Unified_Backend_Tests PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+)
+
+# Set environment for SYCL if needed
+if(USE_SYCL_ACPP OR USE_SYCL_ICPX)
+    set_tests_properties(Unified_Backend_Tests PROPERTIES
+        ENVIRONMENT "ACPP_TARGETS=omp;SYCL_DEVICE_FILTER=cpu;ACPP_DEBUG=1"
+    )
+endif()
+
+# Add to common list
+list(APPEND COMMON_TEST_EXECUTABLES test_unified_backend)
+message(STATUS "Added unified backend test executable: test_unified_backend")
 
 # Add Simple Multi-GPU test (no OpenMP, just DeviceBuffer on multiple devices)
 add_executable(test_simple_multi_gpu

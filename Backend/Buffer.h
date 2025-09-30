@@ -699,11 +699,11 @@ private:
 
   static Resource get_device_resource(short device_id) {
 #ifdef USE_SYCL
-    return Resource{ResourceType::SYCL, static_cast<idx_t>(device_id)};
+    return Resource{ResourceType::SYCL, device_id};
 #elif defined(USE_CUDA)
-    return Resource{ResourceType::CUDA, static_cast<idx_t>(device_id)};
+    return Resource{ResourceType::CUDA, device_id};
 #elif defined(USE_METAL)
-    return Resource{ResourceType::METAL, static_cast<idx_t>(device_id)};
+    return Resource{ResourceType::METAL, device_id};
 #else
     return Resource{ResourceType::CPU, 0};
 #endif

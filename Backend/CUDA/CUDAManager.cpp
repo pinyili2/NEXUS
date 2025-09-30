@@ -155,14 +155,20 @@ void Manager::init_for_rank(int local_rank, int ranks_per_node,
   // Determine number of OpenMP threads
   if (threads_per_rank <= 0) {
 // Use OMP_NUM_THREADS if set, otherwise use max available
+#ifdef _OPENMP
 #pragma omp parallel
     {
 #pragma omp single
       omp_threads_ = omp_get_num_threads();
     }
+#else
+    omp_threads_ = 1;
+#endif
   } else {
     omp_threads_ = threads_per_rank;
+#ifdef _OPENMP
     omp_set_num_threads(omp_threads_);
+#endif
   }
 
   // Get total number of GPUs
@@ -269,10 +275,20 @@ void Manager::init_for_rank(int local_rank, int ranks_per_node,
           if (err == cudaSuccess || err == cudaErrorPeerAccessAlreadyEnabled) {
             LOGDEBUG("Peer access enabled: GPU {} <-> GPU {}", rank_devices_[i],
                      rank_devices_[j]);
+          } else {
+            LOGWARN("Failed to enable peer access GPU {} -> GPU {}: {}",
+                    rank_devices_[i], rank_devices_[j], cudaGetErrorString(err));
           }
 
           CUDA_CHECK(cudaSetDevice(rank_devices_[j]));
           err = cudaDeviceEnablePeerAccess(rank_devices_[i], 0);
+          if (err == cudaSuccess || err == cudaErrorPeerAccessAlreadyEnabled) {
+            LOGDEBUG("Peer access enabled: GPU {} <-> GPU {}", rank_devices_[j],
+                     rank_devices_[i]);
+          } else {
+            LOGWARN("Failed to enable peer access GPU {} -> GPU {}: {}",
+                    rank_devices_[j], rank_devices_[i], cudaGetErrorString(err));
+          }
         }
       }
     }
@@ -280,6 +296,7 @@ void Manager::init_for_rank(int local_rank, int ranks_per_node,
   }
 
   // Configure for OpenMP usage
+#ifdef _OPENMP
   if (omp_threads_ > 1) {
 // Set thread affinity for NUMA awareness
 #pragma omp parallel
@@ -294,6 +311,7 @@ void Manager::init_for_rank(int local_rank, int ranks_per_node,
     LOGINFO("OpenMP configuration complete: {} threads across {} GPU(s)",
             omp_threads_, rank_devices_.size());
   }
+#endif
 
   LOGINFO("CUDA Manager initialized for rank {} with {} GPU(s) and {} OpenMP "
           "thread(s)",
@@ -347,7 +365,11 @@ void Manager::set_omp_gpu_affinity(const std::string &strategy) {
 }
 
 void Manager::init_for_omp_thread() {
+#ifdef _OPENMP
   int thread_id = omp_get_thread_num();
+#else
+  int thread_id = 0;
+#endif
 
   if (thread_id >= static_cast<int>(thread_gpu_map_.size())) {
     LOGWARN("Thread {} has no GPU mapping. Using GPU 0", thread_id);
@@ -362,7 +384,11 @@ void Manager::init_for_omp_thread() {
 }
 
 int Manager::get_thread_gpu() {
+#ifdef _OPENMP
   int thread_id = omp_get_thread_num();
+#else
+  int thread_id = 0;
+#endif
 
   if (thread_id >= static_cast<int>(thread_gpu_map_.size())) {
     return 0; // Default to GPU 0
@@ -371,24 +397,65 @@ int Manager::get_thread_gpu() {
   return thread_gpu_map_[thread_id];
 }
 
-void Manager::finalize() {
+void Manager::finalize(bool reset_devices) {
   if (!initialized_) {
     return;
   }
 
   LOGDEBUG("Finalizing CUDA Manager...");
 
-  // Reset CUDA devices
-  for (size_t i = 0; i < device_properties_.size(); ++i) {
-    cudaSetDevice(i);
-    cudaDeviceReset();
+  // Disable peer access before cleanup
+  for (size_t i = 0; i < rank_devices_.size(); ++i) {
+    for (size_t j = 0; j < rank_devices_.size(); ++j) {
+      if (i != j) {
+        cudaSetDevice(rank_devices_[i]);
+        cudaError_t err = cudaDeviceDisablePeerAccess(rank_devices_[j]);
+        // Ignore errors - peer access might not be enabled
+        (void)err;
+      }
+    }
   }
 
-  device_properties_.clear();
-  peer_access_matrix_.clear();
-  initialized_ = false;
+  // Reset CUDA devices (optional, expensive operation)
+  if (reset_devices) {
+    for (size_t i = 0; i < device_properties_.size(); ++i) {
+      cudaSetDevice(i);
+      cudaDeviceReset();
+    }
+  }
+
+  // Only clear device info and mark uninitialized if doing full reset
+  if (reset_devices) {
+    device_properties_.clear();
+    peer_access_matrix_.clear();
+    initialized_ = false;
+  }
+  // If not resetting devices, keep initialized_ = true so device_count() works
+
+  // Always clear rank-specific info to allow reinitialization
+  rank_devices_.clear();
+  thread_gpu_map_.clear();
+  multi_rank_mode_ = false;
+  rank_id_ = -1;
+  omp_threads_ = 1;
+  gpu_affinity_strategy_ = "block";
 
   LOGINFO("CUDA Manager finalized");
+}
+
+void Manager::load_info() {
+  if (!initialized_) {
+    init();
+  }
+
+  LOGINFO("CUDA Manager Information:");
+  LOGINFO("  Device count: {}", device_count());
+  for (int i = 0; i < device_count(); ++i) {
+    const auto& props = get_device_properties(i);
+    LOGINFO("  Device {}: {} (Compute {}.{}, Memory: {:.2f} GB)",
+            i, props.name, props.major, props.minor,
+            props.totalGlobalMem / (1024.0 * 1024.0 * 1024.0));
+  }
 }
 
 } // namespace CUDA
