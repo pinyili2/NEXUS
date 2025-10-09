@@ -51,28 +51,34 @@ namespace sx = std::experimental;
 #ifndef KERNEL_FUNC
 #define KERNEL_FUNC
 #endif
-
+/*
 #if defined(__CUDACC__)
 // For CUDA, atomicAdd is a built-in function for floats
 #define ATOMIC_ADD(ptr, val) atomicAdd((ptr), (val))
 #elif defined(__SYCL_DEVICE_ONLY__)
-// For SYCL: fetch_add available for integral types, CAS for floating-point
+
 #define ATOMIC_ADD(ptr, val)                                                   \
   ([&]() -> std::remove_reference_t<decltype(*(ptr))> {                        \
     using value_type = std::remove_reference_t<decltype(*(ptr))>;              \
-    auto atomic_ref =                                                          \
-        sycl::atomic_ref<value_type, sycl::memory_order::relaxed,              \
-                         sycl::memory_scope::device>(*(ptr));                  \
-    if constexpr (std::is_integral_v<value_type>) {                            \
+    if constexpr (std::is_same_v<value_type, float>) {                         \
+      auto atomic_ref = sycl::atomic_ref<float, sycl::memory_order::relaxed,   \
+                                         sycl::memory_scope::device>(*(ptr));  \
+      return atomic_ref.fetch_add(val);                                        \
+    } else if constexpr (std::is_integral_v<value_type>) {                     \
+      auto atomic_ref =                                                        \
+          sycl::atomic_ref<value_type, sycl::memory_order::relaxed,            \
+                           sycl::memory_scope::device>(*(ptr));                \
       return atomic_ref.fetch_add(val);                                        \
     } else {                                                                   \
-      auto old_val = atomic_ref.load();                                        \
-      while (!atomic_ref.compare_exchange_weak(old_val, old_val + (val))) {    \
-        /* retry until success */                                              \
-      }                                                                        \
-      return old_val;                                                          \
-    }                                                                          \
-  }())
+
+auto atomic_ref = sycl::atomic_ref<value_type, sycl::memory_order::relaxed,
+                                   sycl::memory_scope::device>(*(ptr));
+auto old_val = atomic_ref.load();
+while (!atomic_ref.compare_exchange_weak(old_val, old_val + (val))) {
+}
+return old_val;
+}
+}())
 
 #elif defined(__METAL_VERSION__)
 #define ATOMIC_ADD(ptr, val)                                                   \
@@ -83,6 +89,7 @@ namespace sx = std::experimental;
 #else
 #define ATOMIC_ADD(ptr, val) (*(ptr) += (val))
 #endif
+*/
 
 // Suppress narrowing conversion warnings
 #ifdef __clang__

@@ -66,7 +66,7 @@ struct jacobi_sweep_portable {
                              a[(iy + 1) * nx + ix] + a[(iy - 1) * nx + ix]);
     a_new[iy * nx + ix] = new_val;
     float r = new_val - a[iy * nx + ix];
-    ATOMIC_ADD(l2_accum, r * r);
+    atomic_add(l2_accum, r * r);
   }
 };
 
@@ -112,7 +112,7 @@ struct jacobi_kernel {
       // L2 norm calculation is safe here.
       float residue = new_val - a[iy * nx + ix];
       float local_l2_norm = residue * residue;
-      ATOMIC_ADD(l2_norm, local_l2_norm);
+      atomic_add(l2_norm, local_l2_norm);
     }
   }
 };
