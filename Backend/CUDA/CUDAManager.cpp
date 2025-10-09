@@ -95,7 +95,9 @@ void Manager::enable_peer_access() {
         cudaError_t err = cudaDeviceEnablePeerAccess(j, 0);
 
         // Ignore if already enabled
-        if (err != cudaSuccess && err != cudaErrorPeerAccessAlreadyEnabled) {
+        if (err == cudaErrorPeerAccessAlreadyEnabled) {
+          cudaGetLastError(); // Clear the error state
+        } else if (err != cudaSuccess) {
           CUDA_CHECK(err);
         }
 
@@ -237,9 +239,8 @@ void Manager::init_for_rank(int local_rank, int ranks_per_node,
     LOGINFO("  Assigned GPUs: {}", rank_devices_.size());
     for (int gpu_id : rank_devices_) {
       const auto &dev = device_properties_[gpu_id];
-      LOGINFO("    GPU {}: {} (SM {}.{}, {:.1f}GB)", gpu_id,
-              dev.name, dev.major,
-              dev.minor,
+      LOGINFO("    GPU {}: {} (SM {}.{}, {:.1f}GB)", gpu_id, dev.name,
+              dev.major, dev.minor,
               dev.totalGlobalMem / (1024.0f * 1024.0f * 1024.0f));
     }
 
@@ -262,8 +263,9 @@ void Manager::init_for_rank(int local_rank, int ranks_per_node,
   // Set the current device to the first assigned GPU
   CUDA_CHECK(cudaSetDevice(rank_devices_[0]));
 
-  // Enable peer access between assigned GPUs if multiple
-  if (rank_devices_.size() > 1) {
+  // DISABLED: Enable peer access between assigned GPUs if multiple (causes
+  // hangs)
+  if (false && rank_devices_.size() > 1) {
     for (size_t i = 0; i < rank_devices_.size(); ++i) {
       for (size_t j = i + 1; j < rank_devices_.size(); ++j) {
         int can_access = 0;
@@ -273,21 +275,31 @@ void Manager::init_for_rank(int local_rank, int ranks_per_node,
           CUDA_CHECK(cudaSetDevice(rank_devices_[i]));
           cudaError_t err = cudaDeviceEnablePeerAccess(rank_devices_[j], 0);
           if (err == cudaSuccess || err == cudaErrorPeerAccessAlreadyEnabled) {
+            // Clear the error if peer access was already enabled
+            if (err == cudaErrorPeerAccessAlreadyEnabled) {
+              cudaGetLastError(); // Clear the error state
+            }
             LOGDEBUG("Peer access enabled: GPU {} <-> GPU {}", rank_devices_[i],
                      rank_devices_[j]);
           } else {
             LOGWARN("Failed to enable peer access GPU {} -> GPU {}: {}",
-                    rank_devices_[i], rank_devices_[j], cudaGetErrorString(err));
+                    rank_devices_[i], rank_devices_[j],
+                    cudaGetErrorString(err));
           }
 
           CUDA_CHECK(cudaSetDevice(rank_devices_[j]));
           err = cudaDeviceEnablePeerAccess(rank_devices_[i], 0);
           if (err == cudaSuccess || err == cudaErrorPeerAccessAlreadyEnabled) {
+            // Clear the error if peer access was already enabled
+            if (err == cudaErrorPeerAccessAlreadyEnabled) {
+              cudaGetLastError(); // Clear the error state
+            }
             LOGDEBUG("Peer access enabled: GPU {} <-> GPU {}", rank_devices_[j],
                      rank_devices_[i]);
           } else {
             LOGWARN("Failed to enable peer access GPU {} -> GPU {}: {}",
-                    rank_devices_[j], rank_devices_[i], cudaGetErrorString(err));
+                    rank_devices_[j], rank_devices_[i],
+                    cudaGetErrorString(err));
           }
         }
       }
@@ -295,9 +307,10 @@ void Manager::init_for_rank(int local_rank, int ranks_per_node,
     CUDA_CHECK(cudaSetDevice(rank_devices_[0]));
   }
 
-  // Configure for OpenMP usage
+  // DISABLED: Configure for OpenMP usage (causes hangs with cudaSetDevice in
+  // parallel)
 #ifdef _OPENMP
-  if (omp_threads_ > 1) {
+  if (false && omp_threads_ > 1) {
 // Set thread affinity for NUMA awareness
 #pragma omp parallel
     {
@@ -312,6 +325,10 @@ void Manager::init_for_rank(int local_rank, int ranks_per_node,
             omp_threads_, rank_devices_.size());
   }
 #endif
+
+  // Instead, let each OpenMP thread handle its own GPU setup when needed
+  LOGINFO("OpenMP thread-GPU mapping configured: {} threads across {} GPU(s)",
+          omp_threads_, rank_devices_.size());
 
   LOGINFO("CUDA Manager initialized for rank {} with {} GPU(s) and {} OpenMP "
           "thread(s)",
@@ -451,9 +468,9 @@ void Manager::load_info() {
   LOGINFO("CUDA Manager Information:");
   LOGINFO("  Device count: {}", device_count());
   for (int i = 0; i < device_count(); ++i) {
-    const auto& props = get_device_properties(i);
-    LOGINFO("  Device {}: {} (Compute {}.{}, Memory: {:.2f} GB)",
-            i, props.name, props.major, props.minor,
+    const auto &props = get_device_properties(i);
+    LOGINFO("  Device {}: {} (Compute {}.{}, Memory: {:.2f} GB)", i, props.name,
+            props.major, props.minor,
             props.totalGlobalMem / (1024.0 * 1024.0 * 1024.0));
   }
 }

@@ -23,53 +23,6 @@
 
 using namespace ARBD;
 
-// ============================================================================
-// Backend Test Fixture - Properly initializes the compile-time selected backend
-// ============================================================================
-
-// Global flag to track backend initialization
-static bool g_backend_available = false;
-void kernel_func(size_t i, const float *input, float *output) {
-  output[i] = input[i] * 3;
-};
-// Initialize backend once across all tests
-static void initialize_backend_once() {
-  static bool initialized = false;
-  if (initialized)
-    return;
-
-  try {
-#ifdef USE_SYCL
-    SYCL::Manager::init();      // Simplified Manager - discovery only
-    SYCL::Manager::load_info(); // Load device info
-    g_backend_available = true;
-#endif
-
-#ifdef USE_CUDA
-    CUDA::Manager::init(); // Simplified Manager - discovery only
-    g_backend_available = true;
-#endif
-
-#ifdef USE_METAL
-    METAL::Manager::init();
-    g_backend_available = true;
-#endif
-
-    if (!g_backend_available) {
-      g_backend_available = true;
-    }
-
-    initialized = true;
-  } catch (const std::exception &e) {
-    g_backend_available = false;
-    WARN("Backend initialization failed: " << e.what());
-  }
-}
-
-// ============================================================================
-// Resource Abstraction Tests
-// ============================================================================
-
 TEST_CASE("Resource Abstraction", "[backend][resource]") {
   initialize_backend_once();
 
@@ -160,7 +113,7 @@ TEST_CASE("Resource Abstraction", "[backend][resource]") {
   }
 
   SECTION("Resource factory methods") {
-    if (g_backend_available) {
+    if (Tests::Global::backend_available) {
       try {
 #ifdef USE_CUDA
         auto cuda_res = Resource::create_cuda_device(0);
@@ -245,7 +198,7 @@ TEST_CASE("KernelConfig Abstraction", "[backend][kernel_config]") {
   }
 
   SECTION("Backend-specific block size validation") {
-    if (g_backend_available) {
+    if (Tests::Global::backend_available) {
       Resource resource;
 
       try {
@@ -328,7 +281,7 @@ TEST_CASE("Event Abstraction", "[backend][event]") {
 
 #ifdef USE_SYCL
   SECTION("SYCL-specific event operations") {
-    if (g_backend_available) {
+    if (Tests::Global::backend_available) {
       Resource sycl_resource;
       Event sycl_event(nullptr, sycl_resource);
 
@@ -364,7 +317,7 @@ TEST_CASE("Buffer Type Interface", "[backend][buffer]") {
   }
 
   SECTION("Buffer construction interface") {
-    if (g_backend_available) {
+    if (Tests::Global::backend_available) {
       try {
         // Ensure SYCL devices are properly initialized
 #ifdef USE_SYCL
@@ -390,7 +343,7 @@ TEST_CASE("Buffer Type Interface", "[backend][buffer]") {
   }
 
   SECTION("Buffer resource binding") {
-    if (g_backend_available) {
+    if (Tests::Global::backend_available) {
       try {
 #ifdef USE_SYCL
         SYCL::Manager::load_info();
@@ -409,7 +362,7 @@ TEST_CASE("Buffer Type Interface", "[backend][buffer]") {
   }
 
   SECTION("Buffer access patterns") {
-    if (g_backend_available) {
+    if (Tests::Global::backend_available) {
       try {
 #ifdef USE_SYCL
         SYCL::Manager::load_info();
@@ -440,7 +393,7 @@ TEST_CASE("Advanced Backend Features", "[backend][advanced]") {
 
 #ifdef USE_SYCL
   SECTION("SYCL Queue Management") {
-    if (g_backend_available) {
+    if (Tests::Global::backend_available) {
       try {
         // Use Resource to get queue
         Resource resource(ResourceType::SYCL, 0);
@@ -458,7 +411,7 @@ TEST_CASE("Advanced Backend Features", "[backend][advanced]") {
   }
 
   SECTION("SYCL Buffer Operations") {
-    if (g_backend_available) {
+    if (Tests::Global::backend_available) {
       try {
         DeviceBuffer<float> buffer(1000);
         std::vector<float> test_data(1000, 3.14f);
@@ -519,7 +472,7 @@ TEST_CASE("Backend Integration", "[backend][integration]") {
   initialize_backend_once();
 
   SECTION("Multi-buffer kernel execution") {
-    if (g_backend_available) {
+    if (Tests::Global::backend_available) {
       try {
         const size_t n = 1000;
         short device_id = 0;
@@ -580,7 +533,7 @@ TEST_CASE("Backend Integration", "[backend][integration]") {
   }
 
   SECTION("Performance characteristics") {
-    if (g_backend_available) {
+    if (Tests::Global::backend_available) {
       const size_t n = 10000;
       short device_id = 0;
       DeviceBuffer<float> input_buf(n, device_id);
@@ -648,7 +601,7 @@ TEST_CASE("Backend Integration", "[backend][integration]") {
 
     // Check if we have at least 2 devices
     initialize_backend_once();
-    if (!g_backend_available) {
+    if (!Tests::Global::backend_available) {
       WARN("Backend not available, skipping multi-device test");
       return;
     }
@@ -738,7 +691,7 @@ TEST_CASE("Backend Integration", "[backend][integration]") {
          "Unified buffers");
 
     initialize_backend_once();
-    if (!g_backend_available) {
+    if (!Tests::Global::backend_available) {
       WARN("Backend not available, skipping 2D matrix test");
       return;
     }

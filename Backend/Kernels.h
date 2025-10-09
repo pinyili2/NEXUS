@@ -35,7 +35,7 @@ namespace ARBD {
 
 template <typename Functor, typename... Args>
 Event launch_kernel(const Resource &resource, const KernelConfig &config,
-                    Functor kernel_functor, Args... args) {
+                    Functor kernel_functor, Args &&...args) {
   // Auto-configure the kernel if grid_size is not set (default 0,0,0)
   KernelConfig local_config = config;
   local_config.validate_block_size(resource);
@@ -57,14 +57,14 @@ Event launch_kernel(const Resource &resource, const KernelConfig &config,
 #ifdef USE_CUDA
   if (resource.type() == ResourceType::CUDA) {
     return launch_cuda_kernel(resource, local_config, kernel_functor,
-                              get_buffer_pointer(args)...);
+                              get_buffer_pointer(std::forward<Args>(args))...);
   }
 #endif
 
 #ifdef USE_SYCL
   if (resource.type() == ResourceType::SYCL) {
     return launch_sycl_kernel(resource, local_config, kernel_functor,
-                              get_buffer_pointer(args)...);
+                              get_buffer_pointer(std::forward<Args>(args))...);
   }
 #endif
 
@@ -78,7 +78,7 @@ Event launch_kernel(const Resource &resource, const KernelConfig &config,
 
   // CPU fallback
   return launch_cpu_kernel(resource, local_config, kernel_functor,
-                           get_buffer_pointer(args)...);
+                           get_buffer_pointer(std::forward<Args>(args))...);
 }
 
 // ============================================================================

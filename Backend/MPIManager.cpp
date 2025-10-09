@@ -2,6 +2,7 @@
 #include "Backend/MPIManager.h"
 #include "ARBDLogger.h"
 #include <algorithm>
+#include <optional>
 
 namespace ARBD::MPI {
 
@@ -29,7 +30,7 @@ void Manager::init(bool assume_gpu_aware) {
   comm_ = MPI_COMM_WORLD;
 
   // Detect GPU-aware capabilities
-  detect_gpu_aware_capabilities();
+  detect_gpu_aware_capabilities(std::nullopt);
 
   initialized_ = true;
 

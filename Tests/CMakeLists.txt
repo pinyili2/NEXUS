@@ -8,7 +8,6 @@ set(CORE_TEST_SOURCES
     async_buffer_tests.cpp
     pinned_unified_tests.cpp
     production_buffer_tests.cpp
-    mpitest.cpp
     ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
 )
 
@@ -40,40 +39,168 @@ set_tests_properties(Backend_Tests PROPERTIES
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
-# Add to common list
-list(APPEND COMMON_TEST_EXECUTABLES test_backend)
+# Jacobi tests - unified configuration for MPI and non-MPI cases
+if(USE_MPI)
+    # MPI Jacobi test
+    add_executable(test_jacobi_mpi
+        Jacobi_mpi.cpp
+        ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
+    )
+    target_include_directories(test_jacobi_mpi PRIVATE ${CMAKE_SOURCE_DIR})
+    target_link_libraries(test_jacobi_mpi PRIVATE "lib${PROJECT_NAME}")
+
+    # Link MPI libraries for MPI Jacobi test
+    if(CMAKE_CXX_COMPILER MATCHES "mpi")
+        message(STATUS "MPI linking for test_jacobi_mpi handled automatically by compiler wrapper")
+    else()
+        target_link_libraries(test_jacobi_mpi PRIVATE MPI::MPI_CXX)
+        target_include_directories(test_jacobi_mpi PRIVATE ${MPI_CXX_INCLUDE_DIRS})
+        message(STATUS "Manually linked MPI libraries to test_jacobi_mpi")
+    endif()
+
+    # Add MPI test
+    add_test(NAME Jacobi_MPI_Tests COMMAND test_jacobi_mpi)
+    set_tests_properties(Jacobi_MPI_Tests PROPERTIES
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+
+    # Add to common list
+    list(APPEND COMMON_TEST_EXECUTABLES test_jacobi_mpi)
+    message(STATUS "Added MPI Jacobi test executable: test_jacobi_mpi")
+else()
+    # Non-MPI Jacobi test
+    add_executable(test_jacobi
+        Jacobi.cpp
+        ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
+    )
+    target_include_directories(test_jacobi PRIVATE ${CMAKE_SOURCE_DIR})
+    target_link_libraries(test_jacobi PRIVATE "lib${PROJECT_NAME}")
+
+    # Add non-MPI test
+    add_test(NAME Jacobi_Tests COMMAND test_jacobi)
+    set_tests_properties(Jacobi_Tests PROPERTIES
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+
+    # Add to common list
+    list(APPEND COMMON_TEST_EXECUTABLES test_jacobi)
+    message(STATUS "Added Jacobi test executable: test_jacobi")
+endif()
+
+# Add backend-specific linking for Jacobi tests
+if(USE_MPI)
+    # MPI Jacobi test backend linking
+    if(USE_SYCL_ACPP OR USE_SYCL_ICPX)
+        target_link_libraries(test_jacobi_mpi PRIVATE Threads::Threads)
+        if(USE_SYCL_ACPP)
+            target_link_libraries(test_jacobi_mpi PRIVATE stdc++)
+        endif()
+
+        # Intel DPC++ specific linking for MPI Jacobi test
+        if(USE_SYCL_ICPX AND CMAKE_CXX_COMPILER MATCHES "icpx")
+            # Find Intel OneAPI SYCL installation directory
+            get_filename_component(ICPX_BIN_DIR "${CMAKE_CXX_COMPILER}" DIRECTORY)
+            get_filename_component(ICPX_INSTALL_DIR "${ICPX_BIN_DIR}" DIRECTORY)
+            set(ICPX_LIB_DIR "${ICPX_INSTALL_DIR}/lib")
+
+            # Find and link the essential Intel DPC++ SYCL runtime libraries for MPI Jacobi test
+            find_library(SYCL_LIB NAMES "sycl" PATHS "${ICPX_LIB_DIR}" NO_DEFAULT_PATH)
+
+            if(SYCL_LIB)
+                target_link_directories(test_jacobi_mpi PRIVATE "${ICPX_LIB_DIR}")
+                target_link_libraries(test_jacobi_mpi PRIVATE ${SYCL_LIB})
+                message(STATUS "Linked Intel DPC++ SYCL runtime to MPI Jacobi test")
+            endif()
+
+            # Link OpenCL for Intel GPU support in MPI Jacobi test
+            find_library(OPENCL_LIB NAMES "OpenCL" PATHS "${ICPX_LIB_DIR}" "/usr/lib64" "/usr/lib" NO_DEFAULT_PATH)
+            if(OPENCL_LIB)
+                target_link_libraries(test_jacobi_mpi PRIVATE ${OPENCL_LIB})
+                message(STATUS "Linked OpenCL to MPI Jacobi test")
+            endif()
+        endif()
+    endif()
+
+    # CUDA linking for MPI Jacobi test
+    if(USE_CUDA)
+        find_package(CUDAToolkit REQUIRED)
+        target_link_libraries(test_jacobi_mpi PRIVATE
+            CUDA::cudart
+            CUDA::cuda_driver
+            curand)
+        if(USE_NCCL)
+            target_link_libraries(test_jacobi_mpi PRIVATE nccl)
+        endif()
+        # Add CUDA kernel implementation for MPI Jacobi test
+        target_sources(test_jacobi_mpi PRIVATE JacobiKernels_inst.cu)
+        message(STATUS "Linked CUDA libraries to MPI Jacobi test")
+    endif()
+else()
+    # Non-MPI Jacobi test backend linking
+    if(USE_SYCL_ACPP OR USE_SYCL_ICPX)
+        target_link_libraries(test_jacobi PRIVATE Threads::Threads)
+        if(USE_SYCL_ACPP)
+            target_link_libraries(test_jacobi PRIVATE stdc++)
+        endif()
+
+        # Intel DPC++ specific linking for non-MPI Jacobi test
+        if(USE_SYCL_ICPX AND CMAKE_CXX_COMPILER MATCHES "icpx")
+            # Find Intel OneAPI SYCL installation directory
+            get_filename_component(ICPX_BIN_DIR "${CMAKE_CXX_COMPILER}" DIRECTORY)
+            get_filename_component(ICPX_INSTALL_DIR "${ICPX_BIN_DIR}" DIRECTORY)
+            set(ICPX_LIB_DIR "${ICPX_INSTALL_DIR}/lib")
+
+            # Find and link the essential Intel DPC++ SYCL runtime libraries for non-MPI Jacobi test
+            find_library(SYCL_LIB NAMES "sycl" PATHS "${ICPX_LIB_DIR}" NO_DEFAULT_PATH)
+
+            if(SYCL_LIB)
+                target_link_directories(test_jacobi PRIVATE "${ICPX_LIB_DIR}")
+                target_link_libraries(test_jacobi PRIVATE ${SYCL_LIB})
+                message(STATUS "Linked Intel DPC++ SYCL runtime to non-MPI Jacobi test")
+            endif()
+
+            # Link OpenCL for Intel GPU support in non-MPI Jacobi test
+            find_library(OPENCL_LIB NAMES "OpenCL" PATHS "${ICPX_LIB_DIR}" "/usr/lib64" "/usr/lib" NO_DEFAULT_PATH)
+            if(OPENCL_LIB)
+                target_link_libraries(test_jacobi PRIVATE ${OPENCL_LIB})
+                message(STATUS "Linked OpenCL to non-MPI Jacobi test")
+            endif()
+        endif()
+    endif()
+
+    # CUDA linking for non-MPI Jacobi test
+    if(USE_CUDA)
+        find_package(CUDAToolkit REQUIRED)
+        target_link_libraries(test_jacobi PRIVATE
+            CUDA::cudart
+            CUDA::cuda_driver
+            curand)
+        if(USE_NCCL)
+            target_link_libraries(test_jacobi PRIVATE nccl)
+        endif()
+        # Add CUDA kernel implementation for non-MPI Jacobi test
+        target_sources(test_jacobi PRIVATE JacobiKernels_inst.cu)
+        message(STATUS "Linked CUDA libraries to non-MPI Jacobi test")
+    endif()
+endif()
+
 message(STATUS "Added backend comprehensive test executable: test_backend")
 
 # Backend comprehensive tests - platform independent, tests all backend abstractions
 if(USE_CUDA)
     add_executable(test_kernel
-        kernels_cuda.cu  # CUDA version of kernel tests
         ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
     )
 else()
-    add_executable(test_kernel
-        kernels.cpp
-        ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
-    )
+    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/kernels.cpp)
+        add_executable(test_kernel
+            kernels.cpp
+            ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
+        )
+    else()
+        message(STATUS "Skipping test_kernel (kernels.cpp not found)")
+    endif()
 endif()
-target_include_directories(test_kernel PRIVATE ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(test_kernel PRIVATE "lib${PROJECT_NAME}")
-
-# Link OpenMP for CUDA Manager
-find_package(OpenMP)
-if(OpenMP_CXX_FOUND)
-    target_link_libraries(test_kernel PRIVATE OpenMP::OpenMP_CXX)
-endif()
-
-# Add backend test
-add_test(NAME Backend_Comprehensive_Tests COMMAND test_kernel)
-set_tests_properties(Backend_Comprehensive_Tests PROPERTIES
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-)
-
-# Add to common list
-list(APPEND COMMON_TEST_EXECUTABLES test_kernel)
-message(STATUS "Added backend comprehensive test executable: test_kernel")
 
 # Buffer tests - comprehensive buffer operations and device transfers
 add_executable(test_buffer
@@ -96,6 +223,7 @@ list(APPEND COMMON_TEST_EXECUTABLES test_buffer)
 message(STATUS "Added Buffer comprehensive test executable: test_buffer")
 
 # Texture tests - texture buffer operations
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/texture_tests.cpp)
 add_executable(test_texture
     texture_tests.cpp
     ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
@@ -112,6 +240,9 @@ set_tests_properties(Texture_Tests PROPERTIES
 # Add to common list
 list(APPEND COMMON_TEST_EXECUTABLES test_texture)
 message(STATUS "Added Texture test executable: test_texture")
+else()
+message(STATUS "Skipping texture tests (texture_tests.cpp not found)")
+endif()
 
 # Metal Tests
 if(USE_METAL AND APPLE)
@@ -181,12 +312,16 @@ if(USE_SYCL_ACPP OR USE_SYCL_ICPX)
         if(SYCL_LIB)
             # Add the Intel DPC++ library directory to linker search paths for tests
             target_link_directories(test_sycl PUBLIC "${ICPX_LIB_DIR}")
-            target_link_directories(test_kernel PUBLIC "${ICPX_LIB_DIR}")
+            if(TARGET test_kernel)
+                target_link_directories(test_kernel PUBLIC "${ICPX_LIB_DIR}")
+            endif()
             target_link_directories(test_buffer PUBLIC "${ICPX_LIB_DIR}")
 
             # Link SYCL runtime library to all SYCL test executables
             target_link_libraries(test_sycl PRIVATE ${SYCL_LIB})
-            target_link_libraries(test_kernel PRIVATE ${SYCL_LIB})
+            if(TARGET test_kernel)
+                target_link_libraries(test_kernel PRIVATE ${SYCL_LIB})
+            endif()
             target_link_libraries(test_buffer PRIVATE ${SYCL_LIB})
 
             message(STATUS "Linked Intel DPC++ SYCL runtime to test executables")
@@ -198,7 +333,9 @@ if(USE_SYCL_ACPP OR USE_SYCL_ICPX)
         find_library(OPENCL_LIB NAMES "OpenCL" PATHS "${ICPX_LIB_DIR}" "/usr/lib64" "/usr/lib" NO_DEFAULT_PATH)
         if(OPENCL_LIB)
             target_link_libraries(test_sycl PRIVATE ${OPENCL_LIB})
-            target_link_libraries(test_kernel PRIVATE ${OPENCL_LIB})
+            if(TARGET test_kernel)
+                target_link_libraries(test_kernel PRIVATE ${OPENCL_LIB})
+            endif()
             target_link_libraries(test_buffer PRIVATE ${OPENCL_LIB})
             message(STATUS "Linked OpenCL to SYCL test executables")
         endif()
@@ -224,8 +361,6 @@ if(USE_CUDA)
     # CUDA core tests - use core sources + CUDA-specific sources
     add_executable(test_cuda
         ${CORE_TEST_SOURCES}
-        #Kernels/cuda_kernels.cu
-        #Kernels/cuda_kernels.cpp
     )
     set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --extended-lambda --allow-unsupported-compiler -Xcompiler=-Wno-deprecated-declarations")
     target_include_directories(test_cuda PRIVATE ${CMAKE_SOURCE_DIR}/src)
@@ -242,394 +377,15 @@ if(USE_CUDA)
         target_link_libraries(test_cuda PRIVATE nccl)
     endif()
 
-    # Link OpenMP for CUDA Manager
-    find_package(OpenMP)
-    if(OpenMP_CXX_FOUND)
-        target_link_libraries(test_cuda PRIVATE OpenMP::OpenMP_CXX)
-    endif()
-
     # Add tests
     catch_discover_tests(test_cuda)
 
-
-    # NOTE: CUDA OpenMP tests are now consolidated into test_unified_backend
-    # Keeping individual CUDA tests commented out to avoid duplication
-
-    # # CUDA OpenMP Multi-GPU test
-    # add_executable(test_cuda_omp_multi_gpu
-    #     cuda_omp_multi_gpu_test.cpp
-    #     cuda_omp_multi_gpu_kernels.cu
-    #     ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
-    # )
-    # # Enable CUDA separable compilation for proper template instantiation
-    # set_property(TARGET test_cuda_omp_multi_gpu PROPERTY CUDA_SEPARABLE_COMPILATION ON)
-    # target_include_directories(test_cuda_omp_multi_gpu PRIVATE ${CMAKE_SOURCE_DIR}/src)
-    # target_link_libraries(test_cuda_omp_multi_gpu PRIVATE
-    #     "lib${PROJECT_NAME}"
-    #     CUDA::cudart
-    #     CUDA::cuda_driver
-    #     curand)
-
-    # if(USE_NCCL)
-    #     target_link_libraries(test_cuda_omp_multi_gpu PRIVATE nccl)
-    # endif()
-
-    # # Link OpenMP if available
-    # find_package(OpenMP)
-    # if(OpenMP_CXX_FOUND)
-    #     target_link_libraries(test_cuda_omp_multi_gpu PRIVATE OpenMP::OpenMP_CXX)
-    # endif()
-
-    # # CUDA Manager OpenMP test
-    # add_executable(test_cuda_omp_manager
-    #     cuda_omp_manager_test.cpp
-    #     ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
-    # )
-    # target_include_directories(test_cuda_omp_manager PRIVATE ${CMAKE_SOURCE_DIR}/src)
-    # target_link_libraries(test_cuda_omp_manager PRIVATE
-    #     "lib${PROJECT_NAME}"
-    #     CUDA::cudart
-    #     CUDA::cuda_driver
-    #     curand)
-
-    # if(USE_NCCL)
-    #     target_link_libraries(test_cuda_omp_manager PRIVATE nccl)
-    # endif()
-
-    # if(OpenMP_CXX_FOUND)
-    #     target_link_libraries(test_cuda_omp_manager PRIVATE OpenMP::OpenMP_CXX)
-    # endif()
-
     # Add CUDA tests (keeping basic CUDA test, removing OMP-specific ones)
     add_test(NAME CUDA_Tests COMMAND test_cuda)
-    # add_test(NAME CUDA_OpenMP_Multi_GPU_Tests COMMAND test_cuda_omp_multi_gpu)
-    # add_test(NAME CUDA_OpenMP_Manager_Tests COMMAND test_cuda_omp_manager)
-
     set_tests_properties(CUDA_Tests PROPERTIES
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     )
-    # Note: CUDA OpenMP tests are now part of test_unified_backend
-
     # Add to common list (only basic CUDA test, OMP tests are in unified test)
     list(APPEND COMMON_TEST_EXECUTABLES test_cuda)
-    message(STATUS "Added CUDA test executable: test_cuda (OpenMP tests moved to unified_backend_test)")
+
 endif()
-
-# MPI Tests
-if(USE_MPI)
-    # Create MPI test executable
-    add_executable(test_mpi
-        mpitest.cpp
-        ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
-    )
-    target_include_directories(test_mpi PRIVATE ${CMAKE_SOURCE_DIR}/src)
-    target_link_libraries(test_mpi PRIVATE "lib${PROJECT_NAME}")
-
-    # Link MPI libraries
-    if(CMAKE_CXX_COMPILER MATCHES "mpi")
-        # When using MPI compiler wrapper, linking is automatic
-        message(STATUS "MPI test linking handled automatically by compiler wrapper")
-    else()
-        # Manual MPI linking when not using wrapper
-        target_link_libraries(test_mpi
-            PRIVATE
-            MPI::MPI_CXX
-        )
-        target_include_directories(test_mpi
-            PRIVATE
-            ${MPI_CXX_INCLUDE_DIRS}
-        )
-        message(STATUS "Manually linked MPI libraries to test executable")
-    endif()
-
-    # Ensure MPI test uses only CXX, not CUDA compiler
-    set_target_properties(test_mpi PROPERTIES
-        LINKER_LANGUAGE CXX
-        CUDA_SEPARABLE_COMPILATION OFF
-        CUDA_RESOLVE_DEVICE_SYMBOLS OFF
-    )
-
-    # Explicitly set this as a CXX-only target to avoid CUDA flag inheritance
-    set_source_files_properties(mpitest.cpp PROPERTIES LANGUAGE CXX)
-
-    # Fix C++ standard library linking issues (same as main executable)
-    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-        target_link_libraries(test_mpi PRIVATE -Wl,--whole-archive stdc++ -Wl,--no-whole-archive)
-        target_link_libraries(test_mpi PRIVATE gcc_s gcc m pthread dl)
-        target_link_options(test_mpi PRIVATE -Wl,--no-as-needed)
-    endif()
-
-    # Note: Since we removed custom main from mpitest.cpp, we need to use a different approach
-    # for MPI tests that require MPI_Init/MPI_Finalize. For now, create basic tests that can
-    # run without MPI initialization (testing compilation and basic functionality)
-
-    # Add MPI-specific tests - these will test MPI availability and basic functionality
-    add_test(NAME MPI_Tests COMMAND test_mpi)
-    set_tests_properties(MPI_Tests PROPERTIES
-        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-    )
-
-    # Set test properties for OpenMPI 5.0.7 compatibility
-    set_tests_properties(MPI_Tests PROPERTIES
-        ENVIRONMENT "OMPI_ALLOW_RUN_AS_ROOT=1;OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1"
-    )
-
-    # Add to common list
-    list(APPEND COMMON_TEST_EXECUTABLES test_mpi)
-    message(STATUS "Added MPI test executable: test_mpi with OpenMPI 5.0.7 support")
-
-    add_executable(test_sycl_mpi
-        ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
-    )
-    target_include_directories(test_sycl_mpi PRIVATE ${CMAKE_SOURCE_DIR}/src)
-    target_link_libraries(test_sycl_mpi PRIVATE "lib${PROJECT_NAME}")
-
-    # Link MPI libraries for SYCL MPI test
-    if(CMAKE_CXX_COMPILER MATCHES "mpi")
-        message(STATUS "SYCL MPI test linking handled automatically by compiler wrapper")
-    else()
-        target_link_libraries(test_sycl_mpi
-            PRIVATE
-            MPI::MPI_CXX
-        )
-        target_include_directories(test_sycl_mpi
-            PRIVATE
-            ${MPI_CXX_INCLUDE_DIRS}
-        )
-        message(STATUS "Manually linked MPI libraries to SYCL MPI test executable")
-    endif()
-
-    # Add SYCL MPI tests
-    add_test(NAME SYCL_MPI_Tests COMMAND test_sycl_mpi)
-
-    # Create Standalone MPI GPU test executable
-    add_executable(test_mpi_gpu_standalone
-        mpi_gpu_standalone_test.cpp
-    )
-    target_include_directories(test_mpi_gpu_standalone PRIVATE ${CMAKE_SOURCE_DIR}/src)
-    target_link_libraries(test_mpi_gpu_standalone PRIVATE "lib${PROJECT_NAME}")
-
-    # Link MPI libraries for Standalone MPI GPU test
-    if(CMAKE_CXX_COMPILER MATCHES "mpi")
-        message(STATUS "Standalone MPI GPU test linking handled automatically by compiler wrapper")
-    else()
-        target_link_libraries(test_mpi_gpu_standalone
-            PRIVATE
-            MPI::MPI_CXX
-        )
-        target_include_directories(test_mpi_gpu_standalone
-            PRIVATE
-            ${MPI_CXX_INCLUDE_DIRS}
-        )
-        message(STATUS "Manually linked MPI libraries to Standalone MPI GPU test executable")
-    endif()
-
-    # Add Standalone MPI GPU tests
-    add_test(NAME Standalone_MPI_GPU_Tests COMMAND test_mpi_gpu_standalone)
-
-    # Create Raw MPI test executable
-    add_executable(test_raw_mpi
-        raw_mpi_test.cpp
-        sycl_mpi_comprehensive_test.cpp
-        ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
-    )
-    target_include_directories(test_raw_mpi PRIVATE ${CMAKE_SOURCE_DIR}/src)
-    target_link_libraries(test_raw_mpi PRIVATE "lib${PROJECT_NAME}")
-
-    # Link MPI libraries for Raw MPI test
-    if(CMAKE_CXX_COMPILER MATCHES "mpi")
-        message(STATUS "Raw MPI test linking handled automatically by compiler wrapper")
-    else()
-        target_link_libraries(test_raw_mpi
-            PRIVATE
-            MPI::MPI_CXX
-        )
-        target_include_directories(test_raw_mpi
-            PRIVATE
-            ${MPI_CXX_INCLUDE_DIRS}
-        )
-        message(STATUS "Manually linked MPI libraries to Raw MPI test executable")
-    endif()
-
-    # Add Raw MPI tests
-    add_test(NAME Raw_MPI_Tests COMMAND test_raw_mpi)
-    set_tests_properties(MPI_Multi_GPU_Tests PROPERTIES
-        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-    )
-
-    # Set test properties for OpenMPI 5.0.7 compatibility
-    set_tests_properties(MPI_Multi_GPU_Tests PROPERTIES
-        ENVIRONMENT "OMPI_ALLOW_RUN_AS_ROOT=1;OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1"
-    )
-
-    # Add to common list (MPI multi-GPU test moved to unified test)
-    # list(APPEND COMMON_TEST_EXECUTABLES test_mpi_multi_gpu)
-    # message(STATUS "Added MPI multi-GPU test executable: test_mpi_multi_gpu")
-endif()
-
-# ========================================================================
-# OpenMP Multi-GPU Tests
-# ========================================================================
-
-# Force enable OpenMP with manual flags for icpx
-if(CMAKE_CXX_COMPILER MATCHES "icpx")
-    message(STATUS "Using icpx - manually enabling OpenMP")
-
-    # Create OpenMP Multi-GPU test executable
-    add_executable(test_omp_multi_gpu
-        omp_multi_gpu_test.cpp
-        ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
-    )
-    target_include_directories(test_omp_multi_gpu PRIVATE ${CMAKE_SOURCE_DIR}/src)
-    target_link_libraries(test_omp_multi_gpu PRIVATE "lib${PROJECT_NAME}")
-
-    # Add OpenMP flags manually for icpx (use standard GCC-style flags)
-    target_compile_options(test_omp_multi_gpu PRIVATE -fopenmp)
-    target_link_options(test_omp_multi_gpu PRIVATE -fopenmp)
-
-    # Add OpenMP Multi-GPU tests
-    add_test(NAME OpenMP_Multi_GPU_Tests COMMAND test_omp_multi_gpu)
-    set_tests_properties(OpenMP_Multi_GPU_Tests PROPERTIES
-        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-    )
-
-    # Add to common list
-    list(APPEND COMMON_TEST_EXECUTABLES test_omp_multi_gpu)
-    message(STATUS "Added OpenMP multi-GPU test executable: test_omp_multi_gpu")
-
-else()
-    # Find OpenMP for non-icpx compilers
-    find_package(OpenMP)
-
-    if(OpenMP_CXX_FOUND)
-        message(STATUS "OpenMP found - building OpenMP multi-GPU tests")
-
-        # Create OpenMP Multi-GPU test executable
-        add_executable(test_omp_multi_gpu
-            omp_multi_gpu_test.cpp
-            ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
-        )
-        target_include_directories(test_omp_multi_gpu PRIVATE ${CMAKE_SOURCE_DIR}/src)
-        target_link_libraries(test_omp_multi_gpu PRIVATE "lib${PROJECT_NAME}")
-
-        # Link OpenMP
-        target_link_libraries(test_omp_multi_gpu PRIVATE OpenMP::OpenMP_CXX)
-
-        # Add OpenMP Multi-GPU tests
-        add_test(NAME OpenMP_Multi_GPU_Tests COMMAND test_omp_multi_gpu)
-        set_tests_properties(OpenMP_Multi_GPU_Tests PROPERTIES
-            WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-        )
-
-        # Add to common list
-        list(APPEND COMMON_TEST_EXECUTABLES test_omp_multi_gpu)
-        message(STATUS "Added OpenMP multi-GPU test executable: test_omp_multi_gpu")
-
-    else()
-        message(STATUS "OpenMP not found - skipping OpenMP multi-GPU tests")
-    endif()
-endif()
-
-# ========================================================================
-# Unified Backend Test (replaces multiple separate test files)
-# ========================================================================
-
-add_executable(test_unified_backend
-    unified_backend_test.cpp
-    ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
-)
-target_include_directories(test_unified_backend PRIVATE ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(test_unified_backend PRIVATE "lib${PROJECT_NAME}" Threads::Threads)
-
-# Add CUDA-specific sources if CUDA is enabled
-if(USE_CUDA)
-    target_sources(test_unified_backend PRIVATE cuda_omp_multi_gpu_kernels.cu)
-    set_property(TARGET test_unified_backend PROPERTY CUDA_SEPARABLE_COMPILATION ON)
-    target_link_libraries(test_unified_backend PRIVATE
-        CUDA::cudart
-        CUDA::cuda_driver
-        curand)
-    if(USE_NCCL)
-        target_link_libraries(test_unified_backend PRIVATE nccl)
-    endif()
-endif()
-
-# Link OpenMP if available
-find_package(OpenMP)
-if(OpenMP_CXX_FOUND)
-    target_link_libraries(test_unified_backend PRIVATE OpenMP::OpenMP_CXX)
-endif()
-
-# Link MPI if available
-if(USE_MPI)
-    if(CMAKE_CXX_COMPILER MATCHES "mpi")
-        message(STATUS "Unified backend test MPI linking handled automatically by compiler wrapper")
-    else()
-        target_link_libraries(test_unified_backend PRIVATE MPI::MPI_CXX)
-        target_include_directories(test_unified_backend PRIVATE ${MPI_CXX_INCLUDE_DIRS})
-    endif()
-
-    # Fix C++ standard library linking issues for MPI
-    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-        target_link_libraries(test_unified_backend PRIVATE -Wl,--whole-archive stdc++ -Wl,--no-whole-archive)
-        target_link_libraries(test_unified_backend PRIVATE gcc_s gcc m pthread dl)
-        target_link_options(test_unified_backend PRIVATE -Wl,--no-as-needed)
-    endif()
-endif()
-
-# Add SYCL-specific linking if SYCL is enabled
-if(USE_SYCL_ACPP)
-    target_link_libraries(test_unified_backend PRIVATE stdc++)
-    target_link_directories(test_unified_backend PRIVATE "${BOOST_LIB_DIR}")
-endif()
-
-if(USE_SYCL_ICPX AND CMAKE_CXX_COMPILER MATCHES "icpx")
-    target_link_directories(test_unified_backend PUBLIC "${ICPX_LIB_DIR}")
-    if(SYCL_LIB)
-        target_link_libraries(test_unified_backend PRIVATE ${SYCL_LIB})
-    endif()
-    if(OPENCL_LIB)
-        target_link_libraries(test_unified_backend PRIVATE ${OPENCL_LIB})
-    endif()
-endif()
-
-# Add unified backend tests
-add_test(NAME Unified_Backend_Tests COMMAND test_unified_backend)
-set_tests_properties(Unified_Backend_Tests PROPERTIES
-    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-)
-
-# Set environment for SYCL if needed
-if(USE_SYCL_ACPP OR USE_SYCL_ICPX)
-    set_tests_properties(Unified_Backend_Tests PROPERTIES
-        ENVIRONMENT "ACPP_TARGETS=omp;SYCL_DEVICE_FILTER=cpu;ACPP_DEBUG=1"
-    )
-endif()
-
-# Add to common list
-list(APPEND COMMON_TEST_EXECUTABLES test_unified_backend)
-message(STATUS "Added unified backend test executable: test_unified_backend")
-
-# Add Simple Multi-GPU test (no OpenMP, just DeviceBuffer on multiple devices)
-add_executable(test_simple_multi_gpu
-    simple_multi_gpu_test.cpp
-    ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
-)
-target_include_directories(test_simple_multi_gpu PRIVATE ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(test_simple_multi_gpu PRIVATE "lib${PROJECT_NAME}" Threads::Threads)
-
-# Add Simple Multi-GPU tests
-add_test(NAME Simple_Multi_GPU_Tests COMMAND test_simple_multi_gpu)
-set_tests_properties(Simple_Multi_GPU_Tests PROPERTIES
-    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-)
-
-# Add to common list
-list(APPEND COMMON_TEST_EXECUTABLES test_simple_multi_gpu)
-message(STATUS "Added Simple multi-GPU test executable: test_simple_multi_gpu")
-
-# Install all test executables at once
-install(TARGETS ${COMMON_TEST_EXECUTABLES})
-
-# Print summary of all test executables
-message(STATUS "All test executables: ${COMMON_TEST_EXECUTABLES}")

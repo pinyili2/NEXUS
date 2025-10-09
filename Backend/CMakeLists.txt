@@ -176,7 +176,7 @@ endif()
 if(USE_CUDA)
     # Set CUDA properties for .cu files
     set_source_files_properties(
-        #Random/Random.cu
+        CUDA/KernelHelper.cu
         PROPERTIES
         LANGUAGE CUDA
         CUDA_SEPARABLE_COMPILATION ON
@@ -193,7 +193,7 @@ if(USE_CUDA)
     # Set CUDA architectures (adjust for your target GPUs)
     set_target_properties("lib${PROJECT_NAME}" PROPERTIES
         CUDA_SEPARABLE_COMPILATION ON
-        CUDA_ARCHITECTURES "60;70;75;80;86"
+        CUDA_ARCHITECTURES "75;80;86"
     )
 
     # Explicitly link C++ standard library for CUDA targets

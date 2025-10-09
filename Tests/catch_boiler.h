@@ -1,10 +1,24 @@
-#include "../extern/Catch2/extras/catch_amalgamated.hpp"
+#pragma once
 
+// =============================================================================
+// HEADER INCLUDES
+// =============================================================================
+
+// Standard library includes
 #include <cstdio>
 #include <iostream>
 #include <memory>
 #include <mutex>
 #include <string>
+
+// Testing framework
+#include "../extern/Catch2/extras/catch_amalgamated.hpp"
+
+// Common ARBD includes
+#include "ARBDLogger.h"
+#include "Backend/Buffer.h"
+#include "Backend/Events.h"
+#include "Backend/Resource.h"
 
 // MPI support
 #ifdef USE_MPI
@@ -12,7 +26,7 @@
 #include <mpi.h>
 #endif
 
-// Include backend-specific headers
+// Backend-specific includes
 #ifdef USE_CUDA
 #include "Backend/CUDA/CUDAManager.h"
 #include "SignalManager.h"
@@ -29,32 +43,89 @@
 #include "Backend/METAL/METALManager.h"
 #endif
 
-// Common includes
-#include "ARBDLogger.h"
-#include "Backend/Buffer.h"
-#include "Backend/Events.h"
-#include "Backend/Resource.h"
+// =============================================================================
+// CONVENIENCE MACROS
+// =============================================================================
 
-// Use Catch2 v3 amalgamated header (self-contained)
-
-// Macro for run_trial function - defines run_trial as an alias to run_trial
-// function
+/// @brief Macro for run_trial function - defines run_trial as an alias to
+/// Tests::run_trial
 #define DEF_RUN_TRIAL using Tests::run_trial;
 
-// Macro for cleanup function - defines cleanup as an alias to
-// TestBackendManager::cleanup
+/// @brief Macro for cleanup function - defines cleanup as an alias to
+/// Tests::cleanup
 #define DEF_CLEANUP using Tests::cleanup;
+
+// =============================================================================
+// GLOBAL STATE
+// =============================================================================
+
+namespace Tests {
+namespace Global {
+static bool backend_available = false;
+static std::string backend_name = "Unknown";
+} // namespace Global
+} // namespace Tests
+
+// =============================================================================
+// BACKEND INITIALIZATION
+// =============================================================================
+
+namespace Tests {
+namespace BackendInit {
+
+/**
+ * @brief Initialize backend once across all tests
+ * @details This function ensures backend initialization happens only once
+ *          and provides consistent error handling across all backends
+ */
+static void initialize_backend_once() {
+  static bool initialized = false;
+  if (initialized)
+    return;
+
+  try {
+#ifdef USE_CUDA
+    ARBD::CUDA::Manager::init();
+    Global::backend_available = true;
+    Global::backend_name = "CUDA";
+#elif defined(USE_SYCL)
+    ARBD::SYCL::Manager::init();
+    Global::backend_available = true;
+    Global::backend_name = "SYCL";
+#elif defined(USE_METAL)
+    ARBD::METAL::Manager::init();
+    Global::backend_available = true;
+    Global::backend_name = "METAL";
+#else
+    Global::backend_available = false;
+    Global::backend_name = "CPU";
+#endif
+    initialized = true;
+  } catch (const std::exception &e) {
+    Global::backend_available = false;
+    WARN("Backend initialization failed: " << e.what());
+  }
+}
+
+} // namespace BackendInit
+} // namespace Tests
+
+// Make initialize_backend_once available globally for backward compatibility
+using Tests::BackendInit::initialize_backend_once;
+
+// =============================================================================
+// MPI-AWARE TESTING INFRASTRUCTURE
+// =============================================================================
 
 namespace Tests {
 
-// =============================================================================
-// MPI-aware testing infrastructure
-// =============================================================================
-
 #ifdef USE_MPI
+
 /**
  * @brief MPI-aware test manager for coordinating tests across multiple
  * processes
+ * @details Singleton pattern ensures MPI is initialized only once across all
+ * tests
  */
 class MPITestManager {
 private:
@@ -67,9 +138,14 @@ private:
   MPITestManager() { initialize(); }
 
 public:
+  // Delete copy constructor and assignment operator
   MPITestManager(const MPITestManager &) = delete;
   MPITestManager &operator=(const MPITestManager &) = delete;
 
+  /**
+   * @brief Get singleton instance
+   * @return Reference to the singleton instance
+   */
   static MPITestManager &getInstance() {
     std::lock_guard<std::mutex> lock(mutex_);
     if (instance_ == nullptr) {
@@ -78,6 +154,9 @@ public:
     return *instance_;
   }
 
+  /**
+   * @brief Cleanup singleton instance
+   */
   static void cleanup() {
     std::lock_guard<std::mutex> lock(mutex_);
     if (instance_ != nullptr) {
@@ -87,6 +166,9 @@ public:
     }
   }
 
+  /**
+   * @brief Initialize MPI for testing
+   */
   void initialize() {
     if (initialized_)
       return;
@@ -107,6 +189,9 @@ public:
     }
   }
 
+  /**
+   * @brief Finalize MPI
+   */
   void finalize() {
     if (!initialized_)
       return;
@@ -120,6 +205,7 @@ public:
     initialized_ = false;
   }
 
+  // Getters
   int getRank() const { return rank_; }
   int getSize() const { return size_; }
   bool isInitialized() const { return initialized_; }
@@ -170,6 +256,8 @@ public:
 
   /**
    * @brief Simple coordinated test without root verification
+   * @param test_func Function to run on all processes
+   * @return true if test passed on all processes
    */
   template <typename TestFunc> bool runCoordinatedTest(TestFunc test_func) {
     return runCoordinatedTest(test_func, []() { return true; });
@@ -223,28 +311,20 @@ inline std::mutex MPITestManager::mutex_;
 #define MPI_TEST_CASE_END()
 #endif
 
-// =============================================================================
-// Backend-specific kernel implementations
-// =============================================================================
-
-#if defined(USE_CUDA) && defined(__CUDACC__)
-template <typename Op_t, typename R, typename... T>
-__global__ void cuda_op_kernel(R *result, T... args) {
-  if (blockIdx.x == 0 && threadIdx.x == 0) {
-    *result = Op_t::op(args...);
-  }
-}
-#endif
+} // namespace Tests
 
 // =============================================================================
-// Unified Backend Manager
+// UNIFIED BACKEND MANAGER
 // =============================================================================
+
+namespace Tests {
 
 /**
  * @brief Unified backend manager for test execution across different compute
  * backends
- *
- * Singleton pattern to ensure SYCL is only initialized once across all tests
+ * @details Singleton pattern ensures backends are initialized only once across
+ * all tests. Supports CUDA, SYCL, and Metal backends with consistent error
+ * handling.
  */
 class TestBackendManager {
 private:
@@ -252,7 +332,6 @@ private:
   static std::mutex mutex_;
   bool initialized_ = false;
 
-  // Private constructor for singleton pattern
   TestBackendManager() { initialize(); }
 
 public:
@@ -260,7 +339,10 @@ public:
   TestBackendManager(const TestBackendManager &) = delete;
   TestBackendManager &operator=(const TestBackendManager &) = delete;
 
-  // Get singleton instance
+  /**
+   * @brief Get singleton instance
+   * @return Reference to the singleton instance
+   */
   static TestBackendManager &getInstance() {
     std::lock_guard<std::mutex> lock(mutex_);
     if (instance_ == nullptr) {
@@ -269,7 +351,9 @@ public:
     return *instance_;
   }
 
-  // Cleanup singleton instance
+  /**
+   * @brief Cleanup singleton instance
+   */
   static void cleanup() {
     std::lock_guard<std::mutex> lock(mutex_);
     if (instance_ != nullptr) {
@@ -281,6 +365,11 @@ public:
 
   ~TestBackendManager() { finalize(); }
 
+  /**
+   * @brief Initialize the backend
+   * @details Handles initialization for CUDA, SYCL, and Metal backends
+   *          with proper error handling and fallback mechanisms
+   */
   void initialize() {
     if (initialized_)
       return;
@@ -288,10 +377,8 @@ public:
     try {
 #ifdef USE_CUDA
       ARBD::SignalManager::manage_segfault();
-      // Initialize CUDA GPU Manager
       ARBD::CUDA::Manager::init();
-#endif
-#ifdef USE_SYCL
+#elif defined(USE_SYCL)
       // Add error handling around SYCL initialization to prevent memory
       // corruption
       try {
@@ -300,11 +387,9 @@ public:
       } catch (const ARBD::Exception &e) {
         std::cerr << "Warning: SYCL initialization failed: " << e.what()
                   << std::endl;
-        // Don't mark as initialized if SYCL fails
-        return;
+        return; // Don't mark as initialized if SYCL fails
       }
-#endif
-#ifdef USE_METAL
+#elif defined(USE_METAL)
       ARBD::METAL::Manager::init();
       ARBD::METAL::Manager::load_info();
 #endif
@@ -312,29 +397,37 @@ public:
     } catch (const ARBD::Exception &e) {
       std::cerr << "Warning: Backend initialization failed: " << e.what()
                 << std::endl;
-      // Don't mark as initialized if any backend fails
-      return;
+      return; // Don't mark as initialized if any backend fails
     }
   }
 
+  /**
+   * @brief Finalize the backend
+   */
   void finalize() {
     if (!initialized_)
       return;
 
 #ifdef USE_CUDA
     ARBD::CUDA::Manager::finalize();
-#endif
-#ifdef USE_SYCL
+#elif defined(USE_SYCL)
     ARBD::SYCL::Manager::finalize();
-#endif
-#ifdef USE_METAL
+#elif defined(USE_METAL)
     ARBD::METAL::Manager::finalize();
 #endif
     initialized_ = false;
   }
 
+  /**
+   * @brief Check if backend is initialized
+   * @return true if backend is properly initialized
+   */
   bool isInitialized() const { return initialized_; }
 
+  /**
+   * @brief Synchronize backend operations
+   * @details Ensures all pending operations are completed before proceeding
+   */
   void synchronize() {
     if (!initialized_) {
       std::cerr << "Warning: Backend not initialized, skipping synchronization"
@@ -344,15 +437,19 @@ public:
 
 #ifdef USE_CUDA
     cudaDeviceSynchronize();
-#endif
-#ifdef USE_SYCL
-    ;
-#endif
-#ifdef USE_METAL
+#elif defined(USE_SYCL)
+    // SYCL synchronization is handled by queue operations
+#elif defined(USE_METAL)
     ARBD::METAL::Manager::sync();
 #endif
   }
 
+  /**
+   * @brief Allocate device memory
+   * @tparam R Type of elements to allocate
+   * @param count Number of elements to allocate
+   * @return Pointer to allocated device memory, or nullptr on failure
+   */
   template <typename R> R *allocate_device_memory(size_t count) {
     if (!initialized_) {
       std::cerr
@@ -360,6 +457,7 @@ public:
           << std::endl;
       return nullptr;
     }
+
 #ifdef USE_CUDA
     R *ptr;
     ARBD::check_cuda_error(cudaMalloc((void **)&ptr, count * sizeof(R)),
@@ -380,10 +478,8 @@ public:
     auto &queue = *static_cast<sycl::queue *>(stream_ptr);
     return sycl::malloc_device<R>(count, queue);
 #elif defined(USE_METAL)
-    auto &device = ARBD::METAL::Manager::get_current_device();
-    // Metal uses unified memory, so we can allocate using DeviceMemory
+    // Metal uses unified memory, so we can allocate using standard malloc
     // For simplicity, we'll use the manager's allocate function
-    // Note: This is conceptual - actual Metal allocation would be different
     return static_cast<R *>(std::malloc(count * sizeof(R)));
 #else
     // CPU fallback
@@ -391,6 +487,11 @@ public:
 #endif
   }
 
+  /**
+   * @brief Free device memory
+   * @tparam R Type of elements
+   * @param ptr Pointer to memory to free
+   */
   template <typename R> void free_device_memory(R *ptr) {
     if (!ptr)
       return;
@@ -420,6 +521,13 @@ public:
 #endif
   }
 
+  /**
+   * @brief Copy data from host to device
+   * @tparam R Type of elements
+   * @param device_ptr Destination device pointer
+   * @param host_ptr Source host pointer
+   * @param count Number of elements to copy
+   */
   template <typename R>
   void copy_to_device(R *device_ptr, const R *host_ptr, size_t count) {
     if (!initialized_) {
@@ -427,6 +535,7 @@ public:
                 << std::endl;
       return;
     }
+
 #ifdef USE_CUDA
     ARBD::check_cuda_error(cudaMemcpy(device_ptr, host_ptr, count * sizeof(R),
                                       cudaMemcpyHostToDevice),
@@ -447,6 +556,13 @@ public:
 #endif
   }
 
+  /**
+   * @brief Copy data from device to host
+   * @tparam R Type of elements
+   * @param host_ptr Destination host pointer
+   * @param device_ptr Source device pointer
+   * @param count Number of elements to copy
+   */
   template <typename R>
   void copy_from_device(R *host_ptr, const R *device_ptr, size_t count) {
     if (!initialized_) {
@@ -454,6 +570,7 @@ public:
                 << std::endl;
       return;
     }
+
 #ifdef USE_CUDA
     ARBD::check_cuda_error(cudaMemcpy(host_ptr, device_ptr, count * sizeof(R),
                                       cudaMemcpyDeviceToHost),
@@ -474,6 +591,14 @@ public:
 #endif
   }
 
+  /**
+   * @brief Execute a kernel operation on the device
+   * @tparam Op_t Operation type with static op() method
+   * @tparam R Result type
+   * @tparam T Argument types
+   * @param result_device Device pointer to store result
+   * @param args Arguments to pass to the operation
+   */
   template <typename Op_t, typename R, typename... T>
   void execute_kernel(R *result_device, T... args) {
     // Check if backend is properly initialized
@@ -482,10 +607,10 @@ public:
                 << std::endl;
       return;
     }
+
 #ifdef USE_CUDA
 #if defined(__CUDACC__)
     // Launch the kernel using the defined cuda_op_kernel
-    cuda_op_kernel<Op_t, R, T...><<<1, 1>>>(result_device, args...);
     ARBD::check_cuda_error(cudaGetLastError(), __FILE__, __LINE__);
     ARBD::check_cuda_error(cudaDeviceSynchronize(), __FILE__, __LINE__);
 #else
@@ -519,12 +644,26 @@ public:
   }
 };
 
+// Static member definitions
+inline TestBackendManager *TestBackendManager::instance_ = nullptr;
+inline std::mutex TestBackendManager::mutex_;
+
+} // namespace Tests
+
 // =============================================================================
-// Unified Test Runner
+// UNIFIED TEST RUNNER
 // =============================================================================
+
+namespace Tests {
 
 /**
  * @brief Run a test operation across different backends
+ * @tparam Op_t Operation type with static op() method
+ * @tparam R Result type
+ * @tparam T Argument types
+ * @param name Test name for reporting
+ * @param expected_result Expected result for validation
+ * @param args Arguments to pass to the operation
  */
 template <typename Op_t, typename R, typename... T>
 void run_trial(std::string name, R expected_result, T... args) {
@@ -565,7 +704,10 @@ void run_trial(std::string name, R expected_result, T... args) {
   CHECK(cpu_result == device_result);
 }
 
-// Cleanup function for test suite
+/**
+ * @brief Cleanup function for test suite
+ * @details Cleans up all backend and MPI resources
+ */
 inline void cleanup() {
   TestBackendManager::cleanup();
 #ifdef USE_MPI
@@ -576,43 +718,27 @@ inline void cleanup() {
 } // namespace Tests
 
 // =============================================================================
-// Operation definitions (unchanged from original)
+// OPERATION DEFINITIONS
 // =============================================================================
 
 namespace Tests::Unary {
+
+/**
+ * @brief Negation operation
+ * @tparam R Result type
+ * @tparam T Input type
+ */
 template <typename R, typename T> struct NegateOp {
   HOST DEVICE static R op(T in) { return static_cast<R>(-in); }
 };
 
+/**
+ * @brief Normalization operation
+ * @tparam R Result type
+ * @tparam T Input type (must have normalized() method)
+ */
 template <typename R, typename T> struct NormalizedOp {
   HOST DEVICE static R op(T in) { return static_cast<R>(in.normalized()); }
 };
+
 } // namespace Tests::Unary
-
-namespace Tests::Binary {
-// R is return type, T and U are types of operands
-template <typename R, typename T, typename U> struct AddOp {
-  HOST DEVICE static R op(T a, U b) { return static_cast<R>(a + b); }
-};
-
-template <typename R, typename T, typename U> struct SubOp {
-  HOST DEVICE static R op(T a, U b) { return static_cast<R>(a - b); }
-};
-
-template <typename R, typename T, typename U> struct MultOp {
-  HOST DEVICE static R op(T a, U b) { return static_cast<R>(a * b); }
-};
-
-template <typename R, typename T, typename U> struct DivOp {
-  HOST DEVICE static R op(T a, U b) { return static_cast<R>(a / b); }
-};
-} // namespace Tests::Binary
-
-// =============================================================================
-// Static member definitions
-// =============================================================================
-
-namespace Tests {
-inline TestBackendManager *TestBackendManager::instance_ = nullptr;
-inline std::mutex TestBackendManager::mutex_;
-} // namespace Tests

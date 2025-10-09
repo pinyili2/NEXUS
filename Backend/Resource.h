@@ -5,6 +5,7 @@
 #include "Header.h"
 
 #ifdef USE_CUDA
+#include "CUDA/CUDAManager.h"
 #include "CUDA/CUDAStreams.h"
 #endif
 
@@ -37,10 +38,13 @@ enum class ResourceType : uint8_t {
 // Compile-time default backend selection
 #ifdef USE_SYCL
 constexpr ResourceType DEFAULT_RESOURCE_TYPE = ResourceType::SYCL;
+#define DEVICE_CHECK(call) SYCL_CHECK(call)
 #elif defined(USE_CUDA)
 constexpr ResourceType DEFAULT_RESOURCE_TYPE = ResourceType::CUDA;
+#define DEVICE_CHECK(call) CUDA_CHECK(call)
 #elif defined(USE_METAL)
 constexpr ResourceType DEFAULT_RESOURCE_TYPE = ResourceType::METAL;
+#define DEVICE_CHECK(call) METAL_CHECK(call)
 #else
 constexpr ResourceType DEFAULT_RESOURCE_TYPE = ResourceType::CPU;
 #endif
@@ -101,15 +105,14 @@ public:
    * @brief Default constructor creates a resource using the compile-time
    * selected backend.
    */
-  HOST DEVICE constexpr Resource() = default;
+  constexpr Resource() = default;
 
-  HOST DEVICE constexpr Resource(short device_id) : id_(device_id) {}
+  constexpr Resource(short device_id) : id_(device_id) {}
 
   /**
    * @brief Construct a resource with specified type and optional ID.
    */
-  HOST DEVICE constexpr Resource(ResourceType resource_type,
-                                 short device_id = 0)
+  constexpr Resource(ResourceType resource_type, short device_id = 0)
       : type_(resource_type), id_(device_id) {}
 
   // Destructor, copy, move operations

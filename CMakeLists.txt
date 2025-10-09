@@ -428,6 +428,21 @@ endif()
 if(USE_MPI)
     message(STATUS "MPI support is enabled.")
 
+
+    # Set MPI hints from cache variables if provided (from CMakePresets.json)
+    if(DEFINED MPI_CXX_COMPILER)
+        set(MPI_CXX_COMPILER "${MPI_CXX_COMPILER}" CACHE FILEPATH "MPI CXX compiler")
+    endif()
+    if(DEFINED MPI_C_COMPILER)
+        set(MPI_C_COMPILER "${MPI_C_COMPILER}" CACHE FILEPATH "MPI C compiler")
+    endif()
+    if(DEFINED MPI_CXX_INCLUDE_PATH)
+        set(MPI_CXX_INCLUDE_PATH "${MPI_CXX_INCLUDE_PATH}" CACHE PATH "MPI CXX include path")
+    endif()
+    if(DEFINED MPI_CXX_LIBRARIES)
+        set(MPI_CXX_LIBRARIES "${MPI_CXX_LIBRARIES}" CACHE FILEPATH "MPI CXX libraries")
+    endif()
+
     # Find MPI package
     find_package(MPI REQUIRED COMPONENTS CXX)
 

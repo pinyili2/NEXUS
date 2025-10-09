@@ -204,10 +204,15 @@ public:
    */
   Buffer(const Buffer &other)
       : resource_(other.resource_), count_(other.count_) {
+    LOGDEBUG("Buffer COPY constructor called! other.device_ptr_={}, this will "
+             "allocate new memory",
+             static_cast<const void *>(other.device_ptr_));
     if (count_ > 0) {
       stream_ =
           resource_.get_stream(stream_type_); // Use Memory stream by default
       allocate_on_resource(resource_, count_, stream_, sync_);
+      LOGDEBUG("Buffer COPY constructor allocated new device_ptr_={}",
+               static_cast<const void *>(device_ptr_));
       copy_device_to_device(other, count_, stream_);
     }
   }
@@ -807,7 +812,7 @@ public:
 
   // multi-device helpers
   void set_devices(const std::vector<Resource> &resources) {
-    devices_ = resources;
+    auto devices_ = resources;
   }
   void prefetch_devices(void *queue = nullptr) {
     for (const auto &r : devices_)
@@ -1073,17 +1078,12 @@ template <typename T> constexpr auto get_buffer_pointer(T &&arg) {
   if constexpr (is_device_buffer_v<std::decay_t<T>>) {
     auto ptr = arg.device_data();
     using ValueType = typename std::decay_t<T>::value_type;
-    auto access = arg.get_access();
+    // @todo: implement
+    (void)arg.get_access();
 
-#if defined(USE_CUDA) || defined(USE_METAL)
-    // Always return non-const pointer to avoid template deduction conflicts
-    // The constness is handled at the kernel level
-    return static_cast<ValueType *__restrict__>(ptr);
-#elif defined(USE_SYCL)
-    // Same logic for SYCL USM
-    return static_cast<ValueType *__restrict__>(ptr);
+#ifndef HOST_GUARD
+    return static_cast<ValueType *>(ptr);
 #else
-    // Fallback for other backends
     return ptr;
 #endif
   } else {

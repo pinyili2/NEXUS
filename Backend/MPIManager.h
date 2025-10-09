@@ -12,6 +12,7 @@
 #include <map>
 #include <memory>
 #include <mpi.h>
+#include <optional>
 #include <type_traits>
 #include <unordered_map>
 #include <vector>
