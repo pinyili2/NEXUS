@@ -60,7 +60,7 @@ run_jacobi_iterations_mpi(int rank, int size, ARBD::Resource &device, int nx,
   // Allocate buffers on this rank's GPU (+2 for ghost cells)
   size_t size_local = static_cast<size_t>(nx) * (ny_local + 2);
   ARBD::DeviceBuffer<float> a_buf(size_local, device.id());
-  ARBD::DeviceBuffer<float> a_new_buf(size_local, device.id());
+  // ARBD::DeviceBuffer<float> a_new_buf(size_local, device.id());
 
   // Allocate L2 norm buffer for convergence checking
   ARBD::DeviceBuffer<float> l2_norm_buf(1, device.id());
@@ -68,8 +68,6 @@ run_jacobi_iterations_mpi(int rank, int size, ARBD::Resource &device, int nx,
 
   // Initialize to zero
   a_buf.copy_from_host(std::vector<float>(size_local, 0.0f));
-  a_new_buf.copy_from_host(std::vector<float>(size_local, 0.0f));
-
   printf("Rank %d: Buffers allocated (%zu floats)\n", rank, size_local);
   fflush(stdout);
 
@@ -77,13 +75,8 @@ run_jacobi_iterations_mpi(int rank, int size, ARBD::Resource &device, int nx,
   ARBD::KernelConfig cfg =
       ARBD::KernelConfig::for_1d(static_cast<idx_t>(ny_local + 2), device);
 
-#ifdef USE_CUDA
-  launch_initialize_boundaries(device, cfg, a_new_buf.data(), a_buf.data(),
-                               M_PI, my_offset, nx, ny_local + 2, ny);
-#else
-  launch_kernel(device, cfg, initialize_boundaries_kernel{}, a_new_buf.data(),
-                a_buf.data(), M_PI, my_offset, nx, ny_local + 2, ny);
-#endif
+  ARBD::launch_kernel(device, cfg, initialize_boundaries_kernel{}, a_buf.data(),
+                      M_PI, my_offset, nx, ny_local + 2, ny);
 
   device.synchronize_streams();
   printf("Rank %d: Boundaries initialized\n", rank);
@@ -166,25 +159,15 @@ run_jacobi_iterations_mpi(int rank, int size, ARBD::Resource &device, int nx,
     ARBD::KernelConfig kernel_cfg = ARBD::KernelConfig::for_2d(
         static_cast<idx_t>(nx - 2), static_cast<idx_t>(ny_local), device);
 
-#ifdef USE_CUDA
-    launch_jacobi_kernel(device, kernel_cfg, a_new_buf.data(), a_buf.data(),
-                         l2_norm_buf.data(), // Always provide buffer, but only
-                                             // use result if calculate_norm
-                         1,                  // iy_start (local coordinates)
-                         ny_local + 1,       // iy_end (local coordinates)
-                         nx, a_new_buf.data(), 0, a_new_buf.data(), 0);
-#else
-    launch_kernel(device, kernel_cfg, jacobi_kernel{}, a_new_buf.data(),
-                  a_buf.data(),
-                  l2_norm_buf.data(), // Always provide buffer, but only use
-                                      // result if calculate_norm
-                  1,                  // iy_start (local coordinates)
-                  ny_local + 1,       // iy_end (local coordinates)
-                  nx, a_new_buf.data(), 0, a_new_buf.data(), 0);
-#endif
+    ARBD::launch_kernel(device, kernel_cfg, jacobi_kernel{}, a_buf.data(),
+                        l2_norm_buf.data(), // Always provide buffer, but only
+                                            // use result if calculate_norm
+                        1,                  // iy_start (local coordinates)
+                        ny_local + 1,       // iy_end (local coordinates)
+                        nx, a_buf.data(), 0, a_buf.data(), 0);
 
     // Swap buffers
-    ::std::swap(a_buf, a_new_buf);
+    //::std::swap(a_buf, a_new_buf);
 
     // Synchronize device
     device.synchronize_streams();

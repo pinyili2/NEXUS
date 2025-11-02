@@ -82,6 +82,69 @@ Event launch_kernel(const Resource &resource, const KernelConfig &config,
 }
 
 // ============================================================================
+// Kernel Launcher with WorkItem Support (for shared memory/reductions)
+// ============================================================================
+
+/**
+ * @brief Launch kernel with WorkItem support for shared memory and barriers
+ *
+ * Use this for kernels that need:
+ * - Shared/local memory access
+ * - Work-group synchronization (barriers)
+ * - Reduction operations
+ *
+ * The functor must have signature:
+ *   DEVICE void operator()(size_t i, WorkItem& item, Args...)
+ *
+ * @param resource The compute resource
+ * @param config Kernel configuration (must set shared_memory > 0 if needed)
+ * @param kernel_functor The kernel functor
+ * @param args Kernel arguments
+ * @return Event for synchronization
+ */
+template <typename Functor, typename... Args>
+Event launch_kernel_with_workitem(const Resource &resource,
+                                  const KernelConfig &config,
+                                  Functor kernel_functor, Args &&...args) {
+  KernelConfig local_config = config;
+  local_config.validate_block_size(resource);
+
+  // Standardize problem size
+  if (local_config.problem_size.x == 0 || local_config.problem_size.y == 0 ||
+      local_config.problem_size.z == 0) {
+    kerneldim3 new_problem{};
+    new_problem.x = std::max<idx_t>(1, local_config.grid_size.x *
+                                           local_config.block_size.x);
+    new_problem.y = std::max<idx_t>(1, local_config.grid_size.y *
+                                           local_config.block_size.y);
+    new_problem.z = std::max<idx_t>(1, local_config.grid_size.z *
+                                           local_config.block_size.z);
+    local_config.problem_size = new_problem;
+  }
+
+#ifdef USE_CUDA
+  if (resource.type() == ResourceType::CUDA) {
+    return launch_cuda_kernel_with_workitem(
+        resource, local_config, kernel_functor,
+        get_buffer_pointer(std::forward<Args>(args))...);
+  }
+#endif
+
+#ifdef USE_SYCL
+  if (resource.type() == ResourceType::SYCL) {
+    // Default to int for shared memory type - can be specialized for other
+    // types
+    return launch_sycl_kernel_with_workitem<int>(
+        resource, local_config, kernel_functor,
+        get_buffer_pointer(std::forward<Args>(args))...);
+  }
+#endif
+
+  // CPU fallback (WorkItem still works, just no shared memory)
+  throw_value_error("launch_kernel_with_workitem requires GPU backend");
+}
+
+// ============================================================================
 // Dimensional Kernel Launchers (1D, 2D, 3D)
 // ============================================================================
 

@@ -132,7 +132,7 @@ if(USE_MPI)
             target_link_libraries(test_jacobi_mpi PRIVATE nccl)
         endif()
         # Add CUDA kernel implementation for MPI Jacobi test
-        target_sources(test_jacobi_mpi PRIVATE JacobiKernels_inst.cu)
+        target_sources(test_jacobi_mpi PRIVATE Kernels_inst.cu)
         message(STATUS "Linked CUDA libraries to MPI Jacobi test")
     endif()
 else()
@@ -179,7 +179,7 @@ else()
             target_link_libraries(test_jacobi PRIVATE nccl)
         endif()
         # Add CUDA kernel implementation for non-MPI Jacobi test
-        target_sources(test_jacobi PRIVATE JacobiKernels_inst.cu)
+        target_sources(test_jacobi PRIVATE Kernels_inst.cu)
         message(STATUS "Linked CUDA libraries to non-MPI Jacobi test")
     endif()
 endif()
@@ -289,6 +289,7 @@ if(USE_SYCL_ACPP OR USE_SYCL_ICPX)
     # SYCL backend tests
     add_executable(test_sycl
         ${CORE_TEST_SOURCES}
+        test_reduction.cpp
         ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp)
     target_include_directories(test_sycl PRIVATE ${CMAKE_SOURCE_DIR}/src)
     target_link_libraries(test_sycl PRIVATE "lib${PROJECT_NAME}" Threads::Threads)
@@ -361,7 +362,9 @@ if(USE_CUDA)
     # CUDA core tests - use core sources + CUDA-specific sources
     add_executable(test_cuda
         ${CORE_TEST_SOURCES}
+        test_reduction.cpp
     )
+    target_sources(test_cuda PRIVATE Kernels_inst.cu)
     set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --extended-lambda --allow-unsupported-compiler -Xcompiler=-Wno-deprecated-declarations")
     target_include_directories(test_cuda PRIVATE ${CMAKE_SOURCE_DIR}/src)
     target_link_libraries(test_cuda PRIVATE

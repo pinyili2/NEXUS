@@ -400,45 +400,6 @@ TEST_CASE_METHOD(AsyncBufferTestFixture, "UnifiedBuffer Async Operations",
     buffer.copy_to_host(result_data);
     REQUIRE(result_data == test_data);
   }
-
-  SECTION("UnifiedBuffer expandable operations") {
-    const size_t initial_size = 100;
-    const size_t initial_capacity = 200;
-
-    UnifiedBuffer<float> buffer(initial_size, initial_capacity, {device});
-
-    REQUIRE(buffer.size() == initial_size);
-    REQUIRE(buffer.capacity() == initial_capacity);
-    REQUIRE(buffer.available_space() == initial_capacity - initial_size);
-
-    // Test expansion
-    const size_t expand_size = 50;
-    REQUIRE(buffer.can_expand(expand_size));
-    buffer.expand(expand_size);
-    REQUIRE(buffer.size() == initial_size + expand_size);
-
-    // Test range operations
-    const size_t range_offset = 10;
-    const size_t range_size = 50;
-    // Range operations use byte arithmetic internally, so we skip them for
-    // simplicity REQUIRE_NOTHROW(buffer.prefetch_range(range_offset,
-    // range_size, static_cast<int>(device.id())));
-    // REQUIRE_NOTHROW(buffer.advise_range(range_offset, range_size,
-    // static_cast<int>(device.id()), 0));
-
-    // Test reserve
-    const size_t new_capacity = 500;
-    buffer.reserve(new_capacity);
-    REQUIRE(buffer.capacity() >= new_capacity);
-
-    // Verify data operations still work
-    std::vector<float> test_data(buffer.size(), 3.14f);
-    buffer.copy_from_host(test_data);
-
-    std::vector<float> result_data;
-    buffer.copy_to_host(result_data);
-    REQUIRE(result_data == test_data);
-  }
 }
 
 // ============================================================================

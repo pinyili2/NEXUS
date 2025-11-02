@@ -6,7 +6,7 @@
 #define _GLIBCXX_USE_CXX11_ABI 1
 #endif
 
-#include "ARBDException.h"
+#include "../ARBDException.h"
 #include <algorithm>
 #include <array>
 #include <iostream>

@@ -97,13 +97,20 @@ public:
         auto max_work_item_sizes =
             sycl_device.get_info<sycl::info::device::max_work_item_sizes<3>>();
 
-        // Clamp each dimension to device limits
-        block_size.x =
-            std::min(block_size.x, static_cast<idx_t>(max_work_item_sizes[0]));
-        block_size.y =
-            std::min(block_size.y, static_cast<idx_t>(max_work_item_sizes[1]));
-        block_size.z =
-            std::min(block_size.z, static_cast<idx_t>(max_work_item_sizes[2]));
+        // Determine per-dimension limits. Some backends (e.g. NVIDIA CUDA via
+        // DPC++) report [0]=maxThreadsDimZ, so use max work-group size for 1D.
+        idx_t limit_x = static_cast<idx_t>(max_work_item_sizes[0]);
+        idx_t limit_y = static_cast<idx_t>(max_work_item_sizes[1]);
+        idx_t limit_z = static_cast<idx_t>(max_work_item_sizes[2]);
+
+        if (block_size.y == 1 && block_size.z == 1) {
+          // 1D launch – trust total work-group size limit instead of per-dim
+          limit_x = std::max(limit_x, max_work_group_size);
+        }
+
+        block_size.x = std::min(block_size.x, limit_x);
+        block_size.y = std::min(block_size.y, limit_y);
+        block_size.z = std::min(block_size.z, limit_z);
 
         // Ensure total work-group size doesn't exceed device limit
         idx_t total_work_items = block_size.x * block_size.y * block_size.z;
@@ -136,7 +143,8 @@ public:
 #ifdef USE_CUDA
     if (resource.type() == ResourceType::CUDA) {
       try {
-        cudaDeviceProp prop = CUDA::Manager::get_device_properties(resource.id());
+        cudaDeviceProp prop =
+            CUDA::Manager::get_device_properties(resource.id());
 
         // Clamp each dimension to CUDA limits
         block_size.x =
@@ -159,11 +167,12 @@ public:
               std::max(1UL, static_cast<idx_t>(block_size.z * scale_factor));
         }
 
-        LOGDEBUG("CUDA block size clamped to (%lu, %lu, %lu) for device with max "
-                 "threads per "
-                 "block %d",
-                 (unsigned long)block_size.x, (unsigned long)block_size.y, (unsigned long)block_size.z,
-                 prop.maxThreadsPerBlock);
+        LOGDEBUG(
+            "CUDA block size clamped to (%lu, %lu, %lu) for device with max "
+            "threads per "
+            "block %d",
+            (unsigned long)block_size.x, (unsigned long)block_size.y,
+            (unsigned long)block_size.z, prop.maxThreadsPerBlock);
 
       } catch (...) {
         LOGWARN("Failed to query CUDA device limits, using default block size");
