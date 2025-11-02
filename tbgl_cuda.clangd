@@ -8,9 +8,8 @@ CompileFlags:
     - -D__host__
     - -D__device__
     - -D__global__
-    - -I/data/server10/pinyili2/arbd2v/src
-    - -I/data/server10/pinyili2/arbd2v/extern
-    - -I/data/server10/pinyili2/arbd2v/extern/openvdb/nanovdb
+    - -I/data/server1/pinyili2/NEXUS/Backend
+    - -I/data/server1/pinyili2/NEXUS
     - -I/software/openmpi-4.0.1/include
     - -I/software/cuda-12.4/include
     - -I/software/gcc-12.3.0/include/c++/12.3.0
