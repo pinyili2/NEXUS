@@ -289,8 +289,13 @@ if(USE_SYCL_ACPP OR USE_SYCL_ICPX)
     # SYCL backend tests
     add_executable(test_sycl
         ${CORE_TEST_SOURCES}
-        test_reduction.cpp
-        ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp)
+        DeviceRadixSortSYCL.cpp
+        DeviceRadixSortUSM.cpp
+        SimpleRadixSort.cpp
+        Kernel_for_random_sycl.cpp
+        test_device_radix_sort.cpp
+        test_simple_radix.cpp
+        test_reduction.cpp)
     target_include_directories(test_sycl PRIVATE ${CMAKE_SOURCE_DIR}/src)
     target_link_libraries(test_sycl PRIVATE "lib${PROJECT_NAME}" Threads::Threads)
 
