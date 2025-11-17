@@ -634,18 +634,13 @@ void device_radix_sort_pairs_usm(const Resource &device, uint32_t *keys,
     std::cerr << "WARNING: Launching " << threadBlocks
               << " blocks. Input size may be too large." << std::endl;
   }
-
-  std::cout << "DeviceRadixSortUSM: size=" << size
-            << ", threadBlocks=" << threadBlocks << std::endl;
-
   // Four radix passes
   for (uint32_t pass = 0; pass < 4; ++pass) {
     const uint32_t radixShift = pass * 8;
-    if (pass > 0) {
-      // Reset histograms
-      q.memset(globalHistogram, 0, DRS_RADIX * 4 * sizeof(uint32_t));
-      q.memset(passHistogram, 0, DRS_RADIX * threadBlocks * sizeof(uint32_t));
-    }
+    // Reset histograms
+    q.memset(globalHistogram, 0, DRS_RADIX * 4 * sizeof(uint32_t));
+    q.memset(passHistogram, 0, DRS_RADIX * threadBlocks * sizeof(uint32_t));
+    q.wait();
 
     uint32_t *input_keys = (pass % 2 == 0) ? keys : alt_keys;
     uint32_t *input_payloads = (pass % 2 == 0) ? payloads : alt_payloads;
@@ -745,11 +740,9 @@ void device_radix_sort_pairs_usm(const Resource &device, uint32_t *keys,
           });
     });
     q.wait();
-    std::cout << "Pass " << pass << " upsweep completed" << std::endl;
-
-    // ========================================================================
-    // Scan: Compute prefix sums across work-groups
-    // ========================================================================
+    //  ========================================================================
+    //  Scan: Compute prefix sums across work-groups
+    //  ========================================================================
     q.submit([&](sycl::handler &h) {
       sycl::local_accessor<uint32_t, 1> s_scan(DRS_SCAN_THREADS, h);
 
@@ -799,8 +792,7 @@ void device_radix_sort_pairs_usm(const Resource &device, uint32_t *keys,
             }
           });
     });
-    q.wait();
-    std::cout << "Pass " << pass << " scan completed" << std::endl;
+    // q.wait();
 
     // Compute exclusive prefix sum of global histogram on device
     // This is needed because globalHistogram is used as base offset in
@@ -832,7 +824,7 @@ void device_radix_sort_pairs_usm(const Resource &device, uint32_t *keys,
             globalHistogram[global_offset + local_id] = s_counts[local_id];
           });
     });
-    q.wait();
+    // q.wait();
 
     // ========================================================================
     // Downsweep: Scatter keys and payloads
@@ -1023,14 +1015,13 @@ void device_radix_sort_pairs_usm(const Resource &device, uint32_t *keys,
           });
     });
     q.wait();
-    std::cout << "Pass " << pass << " downsweep completed" << std::endl;
   }
 
   // Determine final output location (after 4 passes: pass 0->alt, 1->keys,
   // 2->alt, 3->keys) So after pass 3, output is in keys
-  uint32_t *final_keys = keys;
-  uint32_t *final_payloads = payloads;
-}
+  // uint32_t *final_keys = keys;
+  // uint32_t *final_payloads = payloads;
 
+} // namespace ARBD
 } // namespace ARBD
 #endif // USE_SYCL

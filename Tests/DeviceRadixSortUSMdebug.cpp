@@ -10,7 +10,10 @@
 namespace ARBD {
 
 void device_radix_sort_pairs_usm(const Resource &device, uint32_t *keys,
-                                 uint32_t *payloads, uint32_t size) {
+                                 uint32_t *payloads, uint32_t *alt_keys,
+                                 uint32_t *alt_payloads,
+                                 uint32_t *globalHistogram,
+                                 uint32_t *passHistogram, uint32_t size) {
   // Get SYCL queue from resource
   sycl::queue &q = *static_cast<sycl::queue *>(device.get_stream());
 
@@ -19,19 +22,6 @@ void device_radix_sort_pairs_usm(const Resource &device, uint32_t *keys,
     std::cerr << "WARNING: Launching " << threadBlocks
               << " blocks. Input size may be too large." << std::endl;
   }
-
-  // Allocate USM device memory - all data structures remain on device
-  // (except for debug code which copies small samples to host)
-  uint32_t *alt_keys = sycl::malloc_device<uint32_t>(size, q);
-  uint32_t *alt_payloads = sycl::malloc_device<uint32_t>(size, q);
-  uint32_t *globalHistogram = sycl::malloc_device<uint32_t>(DRS_RADIX * 4, q);
-  uint32_t *passHistogram =
-      sycl::malloc_device<uint32_t>(DRS_RADIX * threadBlocks, q);
-
-  // Initialize to zero
-  q.memset(globalHistogram, 0, DRS_RADIX * 4 * sizeof(uint32_t));
-  q.memset(passHistogram, 0, DRS_RADIX * threadBlocks * sizeof(uint32_t));
-  q.wait();
 
   std::cout << "DeviceRadixSortUSM: size=" << size
             << ", threadBlocks=" << threadBlocks << std::endl;
@@ -580,13 +570,6 @@ void device_radix_sort_pairs_usm(const Resource &device, uint32_t *keys,
   if (sorted) {
     std::cout << "Final keys are correctly sorted!" << std::endl;
   }
-
-  // Free USM memory
-  sycl::free(alt_keys, q);
-  sycl::free(alt_payloads, q);
-  sycl::free(globalHistogram, q);
-  sycl::free(passHistogram, q);
 }
-
 } // namespace ARBD
 #endif // USE_SYCL

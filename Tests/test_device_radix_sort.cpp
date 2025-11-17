@@ -14,10 +14,11 @@
 using namespace ARBD;
 using namespace Tests;
 
+static int device_id = 0;
 void generate_random_data_drs(const Resource &device,
                               std::vector<uint32_t> &data, uint32_t seed,
                               float entropy = 1.0f) {
-  Random<Resource> rng(device, 128);
+  Random<Resource> rng(device, 12);
   rng.init(seed, 0);
   DeviceBuffer<uint32_t> d_data(data.size(), device.id());
   uint32_t min_val = 0;
@@ -39,7 +40,7 @@ void generate_random_data_drs(const Resource &device,
 TEST_CASE("DeviceRadixSort Key-Value Pairs - Small",
           "[deviceradix][sort][pairs][small]") {
   initialize_backend_once();
-  Resource device(4);
+  Resource device(device_id);
   const uint32_t size = 1024;
 
   SECTION("Sort 1K elements") {
@@ -59,8 +60,6 @@ TEST_CASE("DeviceRadixSort Key-Value Pairs - Small",
     const uint32_t threadBlocks = (size + DRS_PART_SIZE - 1) / DRS_PART_SIZE;
     DeviceBuffer<uint32_t> d_passHistogram(DRS_RADIX * threadBlocks,
                                            device.id());
-    d_globalHistogram.fill(0, true);
-    d_passHistogram.fill(0, true);
     device_radix_sort_pairs_usm(device, d_keys.data(), d_payloads.data(),
                                 d_alt_keys.data(), d_alt_payloads.data(),
                                 d_globalHistogram.data(),
@@ -93,9 +92,9 @@ TEST_CASE("DeviceRadixSort Key-Value Pairs - Small",
 }
 
 TEST_CASE("DeviceRadixSort Key-Value Pairs - Medium",
-          "[cubradix][sort][pairs][medium]") {
+          "[cub][sort][pairs][medium]") {
   initialize_backend_once();
-  Resource device(6);
+  Resource device(device_id);
   const size_t size = 1024 * 1024 * 1024;
 
   SECTION("Sort 1M elements") {
@@ -139,9 +138,9 @@ TEST_CASE("DeviceRadixSort Key-Value Pairs - Medium",
   }
 }
 TEST_CASE("DeviceRadixSort Key-Value Pairs - Medium",
-          "[deviceradix][sort][pairs][medium]") {
+          "[usm][sort][pairs][medium]") {
   initialize_backend_once();
-  Resource device(6);
+  Resource device(device_id);
   const size_t size = 1024 * 1024 * 1024;
 
   SECTION("Sort 1M elements") {
@@ -161,8 +160,6 @@ TEST_CASE("DeviceRadixSort Key-Value Pairs - Medium",
     const uint32_t threadBlocks = (size + DRS_PART_SIZE - 1) / DRS_PART_SIZE;
     DeviceBuffer<uint32_t> d_passHistogram(DRS_RADIX * threadBlocks,
                                            device.id());
-    d_globalHistogram.fill(0, true);
-    d_passHistogram.fill(0, true);
     auto start = std::chrono::high_resolution_clock::now();
 
     device_radix_sort_pairs_usm(device, d_keys.data(), d_payloads.data(),
