@@ -59,8 +59,8 @@ TEST_CASE("DeviceRadixSort Key-Value Pairs - Small",
     const uint32_t threadBlocks = (size + DRS_PART_SIZE - 1) / DRS_PART_SIZE;
     DeviceBuffer<uint32_t> d_passHistogram(DRS_RADIX * threadBlocks,
                                            device.id());
-    d_globalHistogram.fill(0, DRS_RADIX * 4);
-    d_passHistogram.fill(0, DRS_RADIX * threadBlocks);
+    d_globalHistogram.fill(0, true);
+    d_passHistogram.fill(0, true);
     device_radix_sort_pairs_usm(device, d_keys.data(), d_payloads.data(),
                                 d_alt_keys.data(), d_alt_payloads.data(),
                                 d_globalHistogram.data(),
@@ -93,6 +93,52 @@ TEST_CASE("DeviceRadixSort Key-Value Pairs - Small",
 }
 
 TEST_CASE("DeviceRadixSort Key-Value Pairs - Medium",
+          "[cubradix][sort][pairs][medium]") {
+  initialize_backend_once();
+  Resource device(6);
+  const size_t size = 1024 * 1024 * 1024;
+
+  SECTION("Sort 1M elements") {
+    std::vector<uint32_t> h_keys(size);
+    std::vector<uint32_t> h_payloads(size);
+    generate_random_data_drs(device, h_keys, 54321);
+    std::iota(h_payloads.begin(), h_payloads.end(), 0);
+
+    DeviceBuffer<uint32_t> d_keys(size, device.id());
+    DeviceBuffer<uint32_t> d_payloads(size, device.id());
+    d_keys.copy_from_host(h_keys.data(), size);
+    d_payloads.copy_from_host(h_payloads.data(), size);
+
+    DeviceBuffer<uint32_t> d_alt_keys(size, device.id());
+    DeviceBuffer<uint32_t> d_alt_payloads(size, device.id());
+    DeviceBuffer<uint32_t> d_globalHistogram(DRS_RADIX * 4, device.id());
+    const uint32_t threadBlocks = (size + DRS_PART_SIZE - 1) / DRS_PART_SIZE;
+    DeviceBuffer<uint32_t> d_passHistogram(DRS_RADIX * threadBlocks,
+                                           device.id());
+    d_globalHistogram.fill(0, true);
+    d_passHistogram.fill(0, true);
+    auto start = std::chrono::high_resolution_clock::now();
+
+    device_radix_sort_pairs_cub(device.id(), d_keys.data(), d_payloads.data(),
+                                d_alt_keys.data(), d_alt_payloads.data(), size);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration =
+        std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+
+    std::cout << "Sorted " << size << " elements in " << duration.count()
+              << " ms" << std::endl;
+
+    std::vector<uint32_t> h_sorted_keys(size);
+    d_keys.copy_to_host(h_sorted_keys.data(), size);
+
+    // Verify keys are sorted
+    for (uint32_t i = 1; i < size; ++i) {
+      REQUIRE(h_sorted_keys[i - 1] <= h_sorted_keys[i]);
+    }
+  }
+}
+TEST_CASE("DeviceRadixSort Key-Value Pairs - Medium",
           "[deviceradix][sort][pairs][medium]") {
   initialize_backend_once();
   Resource device(6);
@@ -115,13 +161,15 @@ TEST_CASE("DeviceRadixSort Key-Value Pairs - Medium",
     const uint32_t threadBlocks = (size + DRS_PART_SIZE - 1) / DRS_PART_SIZE;
     DeviceBuffer<uint32_t> d_passHistogram(DRS_RADIX * threadBlocks,
                                            device.id());
-    d_globalHistogram.fill(0, DRS_RADIX * 4);
-    d_passHistogram.fill(0, DRS_RADIX * threadBlocks);
+    d_globalHistogram.fill(0, true);
+    d_passHistogram.fill(0, true);
     auto start = std::chrono::high_resolution_clock::now();
+
     device_radix_sort_pairs_usm(device, d_keys.data(), d_payloads.data(),
                                 d_alt_keys.data(), d_alt_payloads.data(),
                                 d_globalHistogram.data(),
                                 d_passHistogram.data(), size);
+
     auto end = std::chrono::high_resolution_clock::now();
     auto duration =
         std::chrono::duration_cast<std::chrono::milliseconds>(end - start);

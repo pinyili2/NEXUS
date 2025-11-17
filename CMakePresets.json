@@ -162,7 +162,12 @@
                 "CMAKE_BUILD_TYPE": "Debug",
                 "CMAKE_CXX_COMPILER": "/software/intel-oneapi-base-toolkit-2025.1.3.7/2025.1/bin/icpx",
                 "USE_SYCL_ICPX": "ON",
-                "CMAKE_CXX_EXTENSIONS": "OFF"
+                "CMAKE_CXX_EXTENSIONS": "OFF",
+                "CMAKE_CXX_FLAGS": "-I/software/gcc-14.2.0-rh8/include/c++/14",
+                "CMAKE_EXE_LINKER_FLAGS": "-L/software/gcc-14.2.0-rh8/lib64 -lstdc++ -Wl,-rpath,/software/gcc-14.2.0-rh8/lib64",
+                "CMAKE_CUDA_COMPILER": "/software/cuda-12.8/bin/nvcc",
+                "CMAKE_CUDA_HOST_COMPILER": "/software/gcc-14.2.0-rh8/bin/g++",
+                "CUDAToolkit_ROOT": "/software/cuda-12.8"
             }
         },
         {

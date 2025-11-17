@@ -96,6 +96,16 @@ struct Policy {
       q.memcpy(dst, src, bytes);
     }
   }
+  template <typename T>
+  static void fill(void *dst, T value, size_t num_elements,
+                   void *queue = nullptr, bool sync = false) {
+    auto &q = *static_cast<sycl::queue *>(queue);
+    if (sync) {
+      q.fill(static_cast<T *>(dst), value, num_elements).wait();
+    } else {
+      q.fill(static_cast<T *>(dst), value, num_elements);
+    }
+  }
 };
 
 struct PinnedPolicy {

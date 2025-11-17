@@ -24,7 +24,9 @@
 #define KERNEL_FUNC [[kernel]]
 #endif
 
-#ifdef USE_SYCL
+// Only include SYCL headers when not compiling CUDA code
+// nvcc doesn't have access to SYCL headers even in a SYCL build
+#if defined(USE_SYCL) && !defined(__CUDACC__)
 #include <sycl/sycl.hpp>
 #include <type_traits>
 #endif
@@ -146,9 +148,9 @@ constexpr inline short NUM_QUEUES = 4;
  * Consider using optimized reduction patterns for better performance.
  */
 template <typename T> inline auto atomic_add(T *ptr, T value) {
-#ifdef USE_CUDA
+#if defined(__CUDACC__) || defined(USE_CUDA)
   return atomicAdd(ptr, value);
-#elif defined(USE_SYCL)
+#elif defined(USE_SYCL) && !defined(__CUDACC__)
   return sycl::atomic_ref<T, sycl::memory_order::relaxed,
                           sycl::memory_scope::device>(*(ptr)) += value;
 #elif defined(USE_METAL)

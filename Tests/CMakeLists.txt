@@ -12,6 +12,7 @@ set(CORE_TEST_SOURCES
 )
 
 
+
 # Common libraries and include directories for all tests
 set(COMMON_TEST_LIBS "lib${PROJECT_NAME}" Catch2::Catch2WithMain)
 if(USE_CUDA)
@@ -286,18 +287,38 @@ endif()
 
 # SYCL Tests
 if(USE_SYCL_ACPP OR USE_SYCL_ICPX)
+    # Check if CUDA toolkit is available for CUB sorting
+    find_package(CUDAToolkit QUIET)
+    if(CUDAToolkit_FOUND)
+        # Enable CUDA language if not already enabled
+        enable_language(CUDA)
+        message(STATUS "CUDA language enabled for CUB sorting in SYCL tests")
+    endif()
+
     # SYCL backend tests
     add_executable(test_sycl
         ${CORE_TEST_SOURCES}
-        DeviceRadixSortSYCL.cpp
         DeviceRadixSortUSM.cpp
-        SimpleRadixSort.cpp
         Kernel_for_random_sycl.cpp
         test_device_radix_sort.cpp
-        test_simple_radix.cpp
         test_reduction.cpp)
     target_include_directories(test_sycl PRIVATE ${CMAKE_SOURCE_DIR}/src)
     target_link_libraries(test_sycl PRIVATE "lib${PROJECT_NAME}" Threads::Threads)
+
+    # Add CUB sorting support if CUDA toolkit is available
+    if(CUDAToolkit_FOUND)
+        # Compile the CUDA file separately as a CUDA source
+        target_sources(test_sycl PRIVATE cubsort.cu)
+        set_source_files_properties(cubsort.cu PROPERTIES
+            LANGUAGE CUDA
+            CUDA_SEPARABLE_COMPILATION ON)
+        target_link_libraries(test_sycl PRIVATE CUDA::cudart CUDA::cuda_driver)
+        set_target_properties(test_sycl PROPERTIES
+            CUDA_SEPARABLE_COMPILATION ON
+            CUDA_ARCHITECTURES "80"
+            CUDA_FLAGS "--allow-unsupported-compiler")
+        message(STATUS "Added CUB sorting support to test_sycl")
+    endif()
 
     if(USE_SYCL_ACPP)
         target_link_libraries(test_sycl PRIVATE stdc++)

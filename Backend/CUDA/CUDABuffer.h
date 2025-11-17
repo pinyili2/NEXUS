@@ -9,7 +9,8 @@
 
 namespace ARBD {
 namespace CUDA {
-
+template <typename T>
+void fill_impl(void *dst, T value, size_t num_elements, void *queue, bool sync);
 struct Policy {
   static void *allocate(const Resource &resource, size_t bytes,
                         void *queue = nullptr, bool sync = true) {
@@ -86,6 +87,11 @@ struct Policy {
       }
       CUDA_CHECK(cudaMemcpyAsync(dst, src, bytes, cudaMemcpyDefault, stream));
     }
+  }
+  template <typename T>
+  static void fill(void *dst, T value, size_t num_elements,
+                   void *queue = nullptr, bool sync = false) {
+    fill_impl<T>(dst, value, num_elements, queue, sync);
   }
 };
 

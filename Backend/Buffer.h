@@ -80,6 +80,14 @@ struct Policy {
     (void)sync;
     std::memcpy(dst, src, bytes);
   }
+
+  template <typename T>
+  static void fill(void *dst, T value, size_t count, void *queue = nullptr,
+                   bool sync = false) {
+    (void)queue;
+    (void)sync;
+    std::fill_n(static_cast<T *>(dst), count, value);
+  }
 };
 } // namespace CPU
 
@@ -515,7 +523,13 @@ public:
   void copy_from_host_sync(const T *host_src, size_t num_elements) {
     copy_from_host(host_src, num_elements, true);
   }
+  void fill(T value = T{0}, bool sync = false) {
+    Policy::fill(device_ptr_, value, count_, stream_, sync);
+  }
 
+  void fill(T value = T{0}, bool sync = false) const {
+    Policy::fill(device_ptr_, value, count_, stream_, sync);
+  }
   /**
    * @brief Copy between device buffers with sync control.
    * @param src Source buffer
